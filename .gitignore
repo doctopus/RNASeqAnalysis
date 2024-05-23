@@ -9,3 +9,4 @@ output/*
 # Except these files in those directory
 !input/*.example
 !output/*.example
+!output/figures/example.jpg
