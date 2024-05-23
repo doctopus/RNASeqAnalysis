@@ -1,0 +1,11 @@
+.DS_Store
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+# Ignore all files in io directory
+input/*
+output/*
+# Except these files in those directory
+!input/*.example
+!output/*.example
