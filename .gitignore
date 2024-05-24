@@ -9,6 +9,8 @@
 input/*
 output/*
 # Except these files in those directory
+!input/GSEA/
+!input/GSEA/*.gmt
 !input/*.example
 !output/*.example
 !output/figures/
