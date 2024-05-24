@@ -160,8 +160,16 @@ TopD_subset358<-data.frame(Top_subset358, check.names = FALSE)
 #name the rows as genesymbols
 rownames(TopD_subset358)<-Top_subset358$GeneSymbol
 
+#Keep only the compared columns
+# Find the column names that contain either factor1 or factor2
+columns_to_keep <- grep(paste(factor1, factor2, sep = "|"), names(TopD_subset), value = TRUE)
+
+# Subset the data frame to keep only those columns
+Top50_f1vsf2358 <- TopD_subset[, columns_to_keep]
+
+
 ## top 50 fold changes
-hmt50358<-pheatmap::pheatmap(TopD_subset358[1:(length(TopD_subset358)-1)],scale="row", annotation_col=colData_358,
+hmt50358<-pheatmap::pheatmap(Top50_f1vsf2358, scale="row", annotation_col=colData_358,
                           annotation_legend =TRUE, color= colorRampPalette(c("blue","white","red"))(99), fontsize_row = 8, main="Top50 FoldChange in 358 Cell Line")
 saveFigure(figure=hmt50358,fileName="Top50FoldChange_heatmap",h=12,w=12)
 

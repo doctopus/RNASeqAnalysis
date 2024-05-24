@@ -2,6 +2,7 @@
 
 #Define Functions########################
 # function to create project folder if not same as R Project folder and io folders in it 
+#...project folder could be the Rproject or within it with the script & io within the project
 setupProject <- function(project) {
   rstudio_dir <- rstudioapi::getActiveProject() # Get the Rstudio Directory
   rstudio_base <- basename(rstudio_dir) # Get the base name of the Rstudio Directory
@@ -37,7 +38,7 @@ setupProject <- function(project) {
   assign("output_dir", output_dir, envir = .GlobalEnv)
 }
 
-# fx to save figures as 300dpi pdfs
+# function to save figures as 300dpi images
 savePDF <- function(figure, fileName, h = 7, w = 7, dpi = 300) {
   currentDate <- format(Sys.Date(), "%Y%m%d") #current date in YYYYMMDD format
   # Define the directory for saving figures
@@ -49,7 +50,6 @@ savePDF <- function(figure, fileName, h = 7, w = 7, dpi = 300) {
   print(figure)
   dev.off()
 }
-
 savePNG <- function(figure, fileName, h = 1200, w = 900, dpi = 300) {
   currentDate <- format(Sys.Date(), "%Y%m%d") # current date in YYYYMMDD format
   # Define the directory for saving figures
@@ -65,25 +65,40 @@ savePNG <- function(figure, fileName, h = 1200, w = 900, dpi = 300) {
 # Example usage
 # Assuming 'figure' is your plot object and 'output_dir' is defined
 # savePNG(figure, "my_plot", h = 700, w = 700, dpi = 300)
+# savePDF(figure, "my_plot", h= 7, w=7, dpi = 300)
 
 
 ############################
 #Initiate project
 setupProject("RNASeqAnalysis")
 getwd()
-# Project specific output for V0.4 UnTrimmedNewIndexHierarchicalCategory
-output_dir <- "/Users/i/Dropbox/Clinic3.0/RStudio/RNASeqAnalysis/output/v0.4_UnTrimmedNewIndexHierarchicalCategory"
+# Project specific override: output folder V0.4 UnTrimmedNewIndexHierarchicalCategory
+output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/v0.4_UnTrimmedNewIndexHierarchicalCategory"
 
 ############################ Install packages
 # BiocManager::install("apeglm")
 # library(apeglm)
-sapply(c("tidyverse", 
-         "devtools", 
-         "annotate", 
-         "org.Hs.eg.db", 
-         "DESeq2",
-         "apeglm"), 
-       require, character.only = TRUE)
+
+# Install not-yet-installed CRAN packages
+list.of.packages.cran <- c("tidyverse", "devtools", "annotate", "ggrepel", "pheatmap", "RColorBrewer")
+new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
+if(length(new.packages.cran)>0) install.packages(new.packages.cran)
+# Install not-yet-installed Bioconductor packages
+list.of.packages.bioc <- c("org.Hs.eg.db", "DESeq2", "apeglm")
+new.packages.bioc <- list.of.packages.bioc[!(list.of.packages.bioc %in% installed.packages()[,"Package"])]
+if(length(new.packages.bioc)>0)if (!requireNamespace("BiocManager")) install.packages("BiocManager")
+BiocManager::install(new.packages.bioc, update = FALSE)
+# Load all packages
+sapply(c(list.of.packages.cran, list.of.packages.bioc), require, character.only=TRUE)
+
+# sapply(c("tidyverse", 
+#          "devtools", 
+#          "annotate", 
+#          "org.Hs.eg.db", 
+#          "DESeq2",
+#          "apeglm"), 
+#        require, character.only = TRUE)
+
 ############Get Input files
 colData_file<-paste0(input_dir,"/samplesheet.csv")
 fc_file<-paste0(input_dir,"/featureCounts_0")
@@ -137,8 +152,8 @@ if (all(colnames(fc) %in% rownames(colData)) &&
 #sp <- org.Hs.eg.db
 #Calculations for DESeq2 starts, need to repeat if groups change
 ddsObject <- DESeqDataSetFromMatrix(countData = fc,
-                       colData = colData,
-                       design = ~ cellLine + drug)
+                                    colData = colData,
+                                    design = ~ cellLine + drug)
 
 #Keeping rows that have at least 10 reads for a minimum number of samples
 #Minimal number of samples is to specify the smallest group size, eg here 12 of each cellLine
@@ -171,7 +186,7 @@ colSums(counts(dds, normalized=T))
 res <- results(dds)
 head(res)
 #We can optionally specify the coefficient or contrast to compare against
-
+#========Need to do if needed for QC
 #Shrinkage of Log Fold Change using apeglm algorithm
 # We provide the name or number of the coefficient we want to shrink,
 #..where the number refers to the order of the coefficient in the following command
@@ -203,26 +218,53 @@ resultsNames(dds3)
 #Filter to find significant changes
 #sigs <- na.omit (specificContrast)
 #sigs <- sigs[sigs$padj <0.05,]
+#============
+#Counts of any single Gene (here, gene with min padj value)gene=which.min(res$padj) OR "ENSG00000197355"
+plotCount <- plotCounts(dds, gene=which.min(res$padj), intgroup = "drug", returnData = TRUE)
+ggplot(plotCount, aes(x=drug, y=count, color =drug))+
+  geom_point(position = position_jitter(w=0.1, h=0))+
+  geom_text_repel(aes(label = rownames(plotCount)))+
+  theme_bw()+
+  ggtitle("UAP1L1 Gene Expression")+
+  theme(plot.title = element_text(hjust = 0.5))
 
 #MA Plot
 plotMA(res, ylim=c(-2, 2))
-plotMA(resOrdered)
+#plotMA(resOrdered)
 
 #It is more useful to visualize the shrunken log2 fold changes
 #..which remove the noise associated with log2 fold changes from low 
 #..count genes without requiring arbitrary filtering
 plotMA(resLFC)
-#Estimate dispersion trend and apply variance stabilizing transformation
-#vsdata <- vst(dds3, blind = FALSE)
 
-plotPCA(vsdata, intgroup = "group")
+#Estimate dispersion trend and apply variance stabilizing transformation
+vsd <- vst(dds, blind = FALSE)
+rld <- rlog(dds, blind=FALSE)
+head(assay(vsd), 3)
+
+#PCA Plot using VSD Transformation
+plotPCAvst <- plotPCA(vsd, intgroup = "drug", returnData=FALSE)
+plotPCAvstData <- plotPCA(vsd, intgroup="drug", returnData=TRUE)
+pca_repel <- plotPCAvst+geom_label_repel(data=plotPCAvstData, aes(label=name))+
+  ggtitle(label="PCA plot of All Cells")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+
+savePNG(figure=pca_repel, fileName = "PCAPlot_Repel", h=1200, w=900)
+savePDF(figure=pca_repel, fileName = "PCAPlot_Repel", h=12, w=9)
+
+#PCA Plot using RLOG Transformation
+plotPCArld(rld, intgroup="drug") #Almost a similar plot
 
 #Plot dispersion estimate
-plotDispEsts(dds3)
+plotDispEsts(dds)
 
-
-
-
+#Plot Heatmmap of Hierarchical Clustering
+rld_mat <- assay(rld) #Extract the trasnformed matrix from the object
+rld_cor <- cor(rld_mat) #Compute pairwise correlation values
+head(rld_cor)
+heat.colors <- RColorBrewer::brewer.pal(6, "Blues")
+pheatmap(rld_cor, annotation=colData, color = heat.colors, border_color = NA,
+         fontsize = 10, fontsize_row = 10, height = 20)
 
 
 #Get Colors########
@@ -231,99 +273,140 @@ my_colors <- colorRampPalette(c("white", "#FEAEAF", "#FF7B2A"))(99)
 
 
 sapply(c("genefilter", "clusterProfiler", "EnhancedVolcano", "GSVA", "DOSE", "RColorBrewer", "pheatmap", "xCell"), require, character.only = TRUE)
-rld318<-vst(dds318) #estimate dispersion trend and apply a variance stabilizing transformationrld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformation
+rld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformationrld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformation
 
 ## creating distance matrix
-sampleDists_subset318 <- as.matrix(dist(t(assay(rld318))))
-hm318<-pheatmap::pheatmap(as.matrix(sampleDists_subset318),annotation_col = colData_318, col=my_colors,annotation_legend=TRUE)
+sampleDists_subset <- as.matrix(dist(t(assay(rld))))
+hm<-pheatmap::pheatmap(as.matrix(sampleDists_subset),annotation_col = colData, col=my_colors,annotation_legend=TRUE)
 
 ## creating PCA plot
-pca<-plotPCA(rld318, intgroup="drug")
+pca<-plotPCA(rld, intgroup="drug")
 # pca<-pca + geom_text(aes(label=name),vjust=2, size = 3)
 # saveFigure(figure=pca,fileName="PCAPlot",h=10,w=20)
 #If needs to label samples using ggrepel
 library(ggrepel)
-zz318 <- plotPCA(rld318, intgroup="drug", returnData=TRUE)
-pca_repel318 <- pca+geom_label_repel(data=zz318, aes(label=name))+
+zz <- plotPCA(rld, intgroup="drug", returnData=TRUE)
+pca_repel <- pca+geom_label_repel(data=zz, aes(label=name))+
   ggtitle(label="PCA plot of 318 Cells")+
   theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
 
 saveFigure(figure=pca_repel318, fileName = "PCAPlot_Repel", h=15, w=20)
-colData(dds318)
+colData(dds)
 
 
 ##### Plotting DEG
 ComparisonColumn <- "drug"
 factor1 <- "Control"
-factor2 <- "128-10"
-resultsNames(dds318)
+factor2 <- "130"
+resultsNames(dds)
 e <- as.character(c(ComparisonColumn, factor1, factor2))
-res318 <- lfcShrink(dds318, contrast = e, type = "normal")
+res <- lfcShrink(dds, contrast = e, type = "normal")
 
-resdata_subset318 <- merge(as.data.frame(res318), as.data.frame(assay(rld318)), by="row.names", sort=FALSE)
-write.csv(resdata_subset318, paste0(output_dir,"/","DifferentialExpressionAnalysis318", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
-names(resdata_subset318)[1] <- "Gene"
-resdata_subset318 <- resdata_subset318[order(resdata_subset318$padj),]
-resdata_subset318 <- resdata_subset318[!is.na(resdata_subset318$padj),]
+resdata_subset <- merge(as.data.frame(res), as.data.frame(assay(rld)), by="row.names", sort=FALSE)
+write.csv(resdata_subset, paste0(output_dir,"/","DifferentialExpressionAnalysis", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+names(resdata_subset)[1] <- "Gene" #Renaming EnsembleID column as Gene
+# resdata_subset <- resdata_subset[order(resdata_subset$padj),]
+# resdata_subset <- resdata_subset[!is.na(resdata_subset$padj),]
+resdata_subset <- resdata_subset %>%
+  filter(!is.na(padj)) %>%
+  arrange(padj)
 
 #Get Bioconductor Annotation Database
 sp <- org.Hs.eg.db
 
 
-resdata_subset318$GeneSymbol<- mapIds(sp, keys=resdata_subset318$Gene, column=c("SYMBOL"), keytype="ENSEMBL", multiVals="first")
-resdata_subset318$EntrezID<- mapIds(sp, keys=resdata_subset318$Gene, column=c("ENTREZID"), keytype="ENSEMBL", multiVals="first")
-write.csv(resdata_subset318, paste0(output_dir,"/","DifferentialExpressionAnalysis_cleaned318", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+resdata_subset$GeneSymbol<- mapIds(sp, keys=resdata_subset$Gene, column=c("SYMBOL"), keytype="ENSEMBL", multiVals="first")
+resdata_subset$EntrezID<- mapIds(sp, keys=resdata_subset$Gene, column=c("ENTREZID"), keytype="ENSEMBL", multiVals="first")
+write.csv(resdata_subset, paste0(output_dir,"/","DifferentialExpressionAnalysis_cleaned", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
 
-resdatagenes_subset318 <- resdata_subset318[complete.cases(resdata_subset318$GeneSymbol),]
-resdatagenes_subset318 <- resdatagenes_subset318[!duplicated(resdatagenes_subset318$GeneSymbol), ]
+resdatagenes_subset <- resdata_subset[complete.cases(resdata_subset$GeneSymbol),]
+resdatagenes_subset <- resdatagenes_subset[!duplicated(resdatagenes_subset$GeneSymbol), ]
 
-resdatagenes_subset318 <- resdatagenes_subset318[order(resdatagenes_subset318$log2FoldChange),]
-Top50genesdown_subset318<-head(resdatagenes_subset318, 50)
-Top50genesup_subset318<-tail(resdatagenes_subset318, 50)
-Top_subset318<-rbind(Top50genesdown_subset318, Top50genesup_subset318)
+resdatagenes_subset <- resdatagenes_subset[order(resdatagenes_subset$log2FoldChange),]
+
+#↑Resdatagenes last modification
+
+Top50genesdown_subset<-head(resdatagenes_subset, 50)
+Top50genesup_subset<-tail(resdatagenes_subset, 50)
+Top_subset<-rbind(Top50genesdown_subset, Top50genesup_subset)
 
 
-R318 <- as.character(rownames(colData_318))
-R318<-c(R318, "GeneSymbol")
-Top_subset318<-Top_subset318%>% dplyr::select(all_of(R318))
-TopD_subset318<-data.frame(Top_subset318, check.names = FALSE)
+R <- as.character(rownames(colData))
+R<-c(R, "GeneSymbol")
+Top_subset<-Top_subset %>% dplyr::select(all_of(R))
+TopD_subset<-data.frame(Top_subset, check.names = FALSE)
 #name the rows as genesymbols
-rownames(TopD_subset318)<-Top_subset318$GeneSymbol
+rownames(TopD_subset)<-Top_subset$GeneSymbol
+
+#Keep only the compared columns
+# Find the column names that contain either factor1 or factor2
+columns_to_keep <- grep(paste(factor1, factor2, sep = "|"), names(TopD_subset), value = TRUE)
+
+# Subset the data frame to keep only those columns
+Top50_f1vsf2 <- TopD_subset[, columns_to_keep]
+
 
 ## top 50 fold changes
-hmt50318<-pheatmap::pheatmap(TopD_subset318[1:(length(TopD_subset318)-1)],scale="row", annotation_col=colData_318,
-                             annotation_legend =TRUE, color= colorRampPalette(c("blue","white","red"))(99), fontsize_row = 8, main="Top50 FoldChange in 318 Cell Line")
-saveFigure(figure=hmt50318,fileName="Top50FoldChange_heatmap",h=12,w=12)
+hmt50f1vsf2<-pheatmap::pheatmap(Top50_f1vsf2, scale="row", 
+                                annotation_col=colData,
+                             annotation_legend =TRUE, 
+                             color= colorRampPalette(c("blue","white","red"))(99), 
+                             annotation_colors = list(drug=c("128-13"="#85253B",
+                                                             "Control"="#809046"),
+                                                      cellLine=c("318"="#007DEF",
+                                                                 "358"="#FFC135")),
+                             fontsize_row = 8, main="Top 50 FoldChange - Control vs 128-13")
+saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128-13",h=12,w=12)
 
 
 ## variable genes
-Ds318<-resdatagenes_subset318%>% dplyr::select(all_of(R318), "GeneSymbol")
-Ds318<-Ds318[!duplicated(Ds318$GeneSymbol), ]
-rownames(Ds318)<-Ds318$GeneSymbol
-Ds318<-Ds318%>% dplyr::select(-"GeneSymbol")
+Ds<-resdatagenes_subset%>% dplyr::select(all_of(R), "GeneSymbol")
+Ds<-Ds[!duplicated(Ds$GeneSymbol), ]
+rownames(Ds)<-Ds$GeneSymbol
+Ds<-Ds%>% dplyr::select(-"GeneSymbol")
 #top 100 variable genes 
-topVarGenes <- head(order(-genefilter::rowVars(Ds318)),100)
-mat318 <- Ds318[topVarGenes, ]
-mat318 <- mat318 - rowMeans(mat318)
+topVarGenes <- head(order(-genefilter::rowVars(Ds)),100)
+mat <- Ds[topVarGenes, ]
+mat <- mat - rowMeans(mat)
 
 #plot the variable genes in heatmap
-hmVariable318<-pheatmap::pheatmap(mat318,
-                                  annotation_col=colData_318,
+hmVariable<-pheatmap::pheatmap(mat,
+                                  annotation_col=colData,
                                   color= colorRampPalette(c("blue","white","red"))(99), 
                                   annotation_colors = list(drug=c("128-10"="#F0978D", 
                                                                   "128-13"="#63D7DE",
                                                                   "130"="#007DEE",
-                                                                  "Control"="#999000")),
+                                                                  "Control"="#999000"),
+                                                           cellLine=c("318"="#007DEF",
+                                                                      "358"="#FFC135")),
                                   annotation_legend =TRUE, 
                                   scale="row", 
                                   fontsize_row = 8, 
                                   show_rownames=T, 
-                                  main="Top100 Variable Genes in 318 Cell Line")
-saveFigure(figure=hmVariable,fileName="Top100VariableGenes",h=12,w=12)
+                                  main="Top100 Variable Genes - All Cell Line")
+saveFigure(figure=hmVariable,fileName="Top100VariableGenes All Cell Lines",h=12,w=12)
 
 # Volcano Plot
-vp318<-EnhancedVolcano(resdata_subset318,
-                       lab = resdata_subset318$GeneSymbol,x = 'log2FoldChange',
+vp<-EnhancedVolcano(resdata_subset,
+                       lab = resdata_subset$GeneSymbol,x = 'log2FoldChange',
                        y = 'pvalue',
                        pCutoff = 10e-4,
                        FCcutoff = 1)
+
+#Pathway Analysis With Hallmark Geneset
+human_hall_file<-paste0(input_dir,"/GSEA/h.all.v2023.2.Hs.symbols.gmt")
+hall <- read.gmt(human_hall_file)
+
+resdatagenes_gsea <- resdatagenes_subset
+resdatagenes_gsea <- resdatagenes_gsea[!is.na(resdatagenes_gsea$log2FoldChange),]
+resdatagenes_gsea <- resdatagenes_gsea[order(-resdatagenes_gsea$log2FoldChange),]
+resdatagenes_gsea$FC_pval <- (resdatagenes_gsea$log2FoldChange)
+logFC.l2n <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$FC_pval
+names(logFC.l2n) <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$GeneSymbol
+
+gsea.hall.l2n <- GSEA(logFC.l2n, TERM2GENE=hall, verbose=FALSE, pvalueCutoff=1)
+gsea.hall.l2n.df <- as.data.frame(gsea.hall.l2n@result)
+write.csv(gsea.hall.l2n.df, paste0(outsdir,"/","GSEA_output", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+
+dp<-dotplot(gsea.hall.l2n, x="NES", showCategory=50, orderBy= "NES",font.size = 7) 
+saveFigure(figure=dp,fileName="HallmarkPathwayAnalysis")

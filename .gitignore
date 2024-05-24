@@ -3,10 +3,13 @@
 .Rhistory
 .RData
 .Ruserdata
+# Figures 
+*.png
 # Ignore all files in io directory
 input/*
 output/*
 # Except these files in those directory
 !input/*.example
 !output/*.example
+!output/figures/
 !output/figures/example.jpg
