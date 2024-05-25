@@ -2,7 +2,7 @@
 
 #Define Functions########################
 # function to create project folder if not same as R Project folder and io folders in it 
-#...project folder could be the Rproject or within it with the script & io within the project
+#...project folder could be the R project or within it with the script & io within the project
 setupProject <- function(project) {
   rstudio_dir <- rstudioapi::getActiveProject() # Get the Rstudio Directory
   rstudio_base <- basename(rstudio_dir) # Get the base name of the Rstudio Directory
@@ -37,72 +37,53 @@ setupProject <- function(project) {
   assign("input_dir", input_dir, envir = .GlobalEnv)
   assign("output_dir", output_dir, envir = .GlobalEnv)
 }
-
-# function to save figures as 300dpi images
-savePDF <- function(figure, fileName, h = 7, w = 7, dpi = 300) {
+savePDF <- function(figure, fileName, h = 7, w = 7) {
   currentDate <- format(Sys.Date(), "%Y%m%d") #current date in YYYYMMDD format
   # Define the directory for saving figures
   figuresDir <- file.path(output_dir, "figures")
   if (!dir.exists(figuresDir)) { dir.create(figuresDir, recursive = TRUE) }
   fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".pdf"))
   # Save the figure
-  pdf(file = fullFilePath, height = h, width = w, pointsize = dpi / 72)
+  pdf(file = fullFilePath, height = h, width = w, pointsize = 300 / 72)
   print(figure)
   dev.off()
 }
-savePNG <- function(figure, fileName, h = 1200, w = 900, dpi = 300) {
+savePNG <- function(figure, fileName, h = 1200, w = 900) {
   currentDate <- format(Sys.Date(), "%Y%m%d") # current date in YYYYMMDD format
   # Define the directory for saving figures
   figuresDir <- file.path(output_dir, "figures")
   if (!dir.exists(figuresDir)) { dir.create(figuresDir, recursive = TRUE) }
   fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".png"))
   # Save the figure as PNG with dimensions in pixels
-  png(file = fullFilePath, height = h, width = w, units = "px", res = dpi)
+  png(file = fullFilePath, height = h, width = w, units = "px", res = 300)
   print(figure)
   dev.off()
 }
 
-# Example usage
-# Assuming 'figure' is your plot object and 'output_dir' is defined
-# savePNG(figure, "my_plot", h = 700, w = 700, dpi = 300)
-# savePDF(figure, "my_plot", h= 7, w=7, dpi = 300)
-
-
-############################
+####Analysis Specific Code ----
 #Initiate project
 setupProject("RNASeqAnalysis")
 getwd()
 # Project specific override: output folder V0.4 UnTrimmedNewIndexHierarchicalCategory
 output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/v0.4_UnTrimmedNewIndexHierarchicalCategory"
 
-############################ Install packages
-# BiocManager::install("apeglm")
-# library(apeglm)
-
-# Install not-yet-installed CRAN packages
-list.of.packages.cran <- c("tidyverse", "devtools", "annotate", "ggrepel", "pheatmap", "RColorBrewer")
+#### Install packages if needed----
+list.of.packages.cran <- c("tidyverse", "devtools", "annotate", "ggrepel", "pheatmap", "RColorBrewer", "EnhancedVolcano")
 new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
 if(length(new.packages.cran)>0) install.packages(new.packages.cran)
 # Install not-yet-installed Bioconductor packages
-list.of.packages.bioc <- c("org.Hs.eg.db", "DESeq2", "apeglm")
+list.of.packages.bioc <- c("org.Hs.eg.db", "DESeq2", "apeglm","genefilter", "clusterProfiler", "GSVA", "DOSE", "xCell")
 new.packages.bioc <- list.of.packages.bioc[!(list.of.packages.bioc %in% installed.packages()[,"Package"])]
 if(length(new.packages.bioc)>0)if (!requireNamespace("BiocManager")) install.packages("BiocManager")
 BiocManager::install(new.packages.bioc, update = FALSE)
-# Load all packages
+# Load packages
 sapply(c(list.of.packages.cran, list.of.packages.bioc), require, character.only=TRUE)
 
-# sapply(c("tidyverse", 
-#          "devtools", 
-#          "annotate", 
-#          "org.Hs.eg.db", 
-#          "DESeq2",
-#          "apeglm"), 
-#        require, character.only = TRUE)
-
-############Get Input files
+#### Source & Process Input files ----
 colData_file<-paste0(input_dir,"/samplesheet.csv")
 fc_file<-paste0(input_dir,"/featureCounts_0")
-########Process input files
+
+##Process input files
 colData<-read.csv(file = colData_file, 
                   header=TRUE, 
                   stringsAsFactors = FALSE, 
@@ -128,6 +109,8 @@ fc <- fc %>%
 # Order the columns according to desired_order
 fc <- fc[, desired_order]
 head(fc)
+
+
 # fc<-read.delim(fc_file,
 #                row.names=NULL,
 #                check.names = FALSE)
@@ -145,12 +128,7 @@ head(fc)
 if (all(colnames(fc) %in% rownames(colData)) && 
     all(colnames(fc) == rownames(colData))) "Data ready for DESeq2" else "Data not ready"
 
-# all(colnames(fc) %in% rownames(colData))
-# all(colnames(fc) == rownames(colData))
-
-#Get Bioconductor Annotation Database
-#sp <- org.Hs.eg.db
-#Calculations for DESeq2 starts, need to repeat if groups change
+#### Calculations for DESeq2 ----
 ddsObject <- DESeqDataSetFromMatrix(countData = fc,
                                     colData = colData,
                                     design = ~ cellLine + drug)
@@ -269,15 +247,18 @@ pheatmap(rld_cor, annotation=colData, color = heat.colors, border_color = NA,
 
 #Get Colors########
 #my_colors <- colorRampPalette(c("blue", "white", "red"))(99)
-my_colors <- colorRampPalette(c("white", "#FEAEAF", "#FF7B2A"))(99)
+my_colors <- colorRampPalette(c("white", "#FF7B2A"))(99)
 
 
-sapply(c("genefilter", "clusterProfiler", "EnhancedVolcano", "GSVA", "DOSE", "RColorBrewer", "pheatmap", "xCell"), require, character.only = TRUE)
+# Extract Transformed values
 rld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformationrld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformation
 
 ## creating distance matrix
 sampleDists_subset <- as.matrix(dist(t(assay(rld))))
-hm<-pheatmap::pheatmap(as.matrix(sampleDists_subset),annotation_col = colData, col=my_colors,annotation_legend=TRUE)
+hm<-pheatmap::pheatmap(as.matrix(sampleDists_subset),
+                       annotation_col = colData, 
+                       col=my_colors,
+                       annotation_legend=TRUE)
 
 ## creating PCA plot
 pca<-plotPCA(rld, intgroup="drug")
@@ -290,11 +271,11 @@ pca_repel <- pca+geom_label_repel(data=zz, aes(label=name))+
   ggtitle(label="PCA plot of 318 Cells")+
   theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
 
-saveFigure(figure=pca_repel318, fileName = "PCAPlot_Repel", h=15, w=20)
+#saveFigure(figure=pca_repel318, fileName = "PCAPlot_Repel", h=15, w=20)
 colData(dds)
 
 
-##### Plotting DEG
+#### Plotting DEG
 ComparisonColumn <- "drug"
 factor1 <- "Control"
 factor2 <- "130"
@@ -348,14 +329,19 @@ Top50_f1vsf2 <- TopD_subset[, columns_to_keep]
 
 ## top 50 fold changes
 hmt50f1vsf2<-pheatmap::pheatmap(Top50_f1vsf2, scale="row", 
-                                annotation_col=colData,
-                             annotation_legend =TRUE, 
-                             color= colorRampPalette(c("blue","white","red"))(99), 
-                             annotation_colors = list(drug=c("128-13"="#85253B",
-                                                             "Control"="#809046"),
-                                                      cellLine=c("318"="#007DEF",
-                                                                 "358"="#FFC135")),
-                             fontsize_row = 8, main="Top 50 FoldChange - Control vs 128-13")
+                              annotation_col=colData,
+                              annotation_legend =TRUE, 
+                              color= colorRampPalette(c("blue","white","red"))(99), 
+                              annotation_colors = list(drug=c("128-10"="#48B2F9",
+                                                             "128-13"="#FAA800",
+                                                                "130"="#FC5AA2",
+                                                             "Control"="#9FD900"),
+                                                      cellLine=c("318"="#6500B1",
+                                                                 "358"="#006E18")),
+                              fontsize_row = 8, 
+                              cluster_cols = F,
+                              cluster_rows = T,
+                              main="Top 50 FoldChange - Control vs 128-13")
 saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128-13",h=12,w=12)
 
 
@@ -372,17 +358,19 @@ mat <- mat - rowMeans(mat)
 #plot the variable genes in heatmap
 hmVariable<-pheatmap::pheatmap(mat,
                                   annotation_col=colData,
-                                  color= colorRampPalette(c("blue","white","red"))(99), 
-                                  annotation_colors = list(drug=c("128-10"="#F0978D", 
-                                                                  "128-13"="#63D7DE",
-                                                                  "130"="#007DEE",
-                                                                  "Control"="#999000"),
-                                                           cellLine=c("318"="#007DEF",
-                                                                      "358"="#FFC135")),
+                                  color= colorRampPalette(c("#1A1AFF","white","#FF1A1A"))(99), 
+                                  annotation_colors = list(drug=c("128-10"="#48B2F9", 
+                                                                  "128-13"="#FAC000",
+                                                                      "130"="#FC5AA2",
+                                                                  "Control"="#9FD900"),
+                                                           cellLine=c("318"="#6500B1",
+                                                                      "358"="#006E18")),
                                   annotation_legend =TRUE, 
                                   scale="row", 
                                   fontsize_row = 8, 
                                   show_rownames=T, 
+                                  cluster_rows = T,
+                                  cluster_cols = T,
                                   main="Top100 Variable Genes - All Cell Line")
 saveFigure(figure=hmVariable,fileName="Top100VariableGenes All Cell Lines",h=12,w=12)
 
