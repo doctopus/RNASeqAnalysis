@@ -37,25 +37,26 @@ setupProject <- function(project) {
   assign("input_dir", input_dir, envir = .GlobalEnv)
   assign("output_dir", output_dir, envir = .GlobalEnv)
 }
-savePDF <- function(figure, fileName, h = 7, w = 7) {
+savePDF <- function(figure, fileName, w = 7, h = 10) {
   currentDate <- format(Sys.Date(), "%Y%m%d") #current date in YYYYMMDD format
   # Define the directory for saving figures
   figuresDir <- file.path(output_dir, "figures")
   if (!dir.exists(figuresDir)) { dir.create(figuresDir, recursive = TRUE) }
   fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".pdf"))
   # Save the figure
-  pdf(file = fullFilePath, height = h, width = w, pointsize = 300 / 72)
+  pdf(file = fullFilePath, width = w, height = h, pointsize = 300 / 72)
   print(figure)
   dev.off()
 }
-savePNG <- function(figure, fileName, h = 1200, w = 900) {
+savePNG <- function(figure, fileName, w = 900, h = 1300) {
   currentDate <- format(Sys.Date(), "%Y%m%d") # current date in YYYYMMDD format
   # Define the directory for saving figures
   figuresDir <- file.path(output_dir, "figures")
   if (!dir.exists(figuresDir)) { dir.create(figuresDir, recursive = TRUE) }
   fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".png"))
   # Save the figure as PNG with dimensions in pixels
-  png(file = fullFilePath, height = h, width = w, units = "px", res = 300)
+  png(file = fullFilePath, width = w, height = h, units = "px")
+  # Render the plot
   print(figure)
   dev.off()
 }

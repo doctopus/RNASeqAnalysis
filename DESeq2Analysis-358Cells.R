@@ -27,14 +27,15 @@ if(basename(getwd()) == project) "Folder setup correctly" else "Fix folder struc
 output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/v0.41_PerCellLine"
 #-----------
 #Define functions
-saveFigure <- function(figure, fileName, h = 7, w = 7, dpi = 300) {
-  currentDate <- format(Sys.Date(), "%Y%m%d") #current date in YYYYMMDD format
+savePNG <- function(figure, fileName, w = 1200, h = 900) {
+  currentDate <- format(Sys.Date(), "%Y%m%d") # current date in YYYYMMDD format
   # Define the directory for saving figures
   figuresDir <- file.path(output_dir, "figures")
   if (!dir.exists(figuresDir)) { dir.create(figuresDir, recursive = TRUE) }
-  fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".pdf"))
-  # Save the figure
-  pdf(file = fullFilePath, height = h, width = w, pointsize = dpi / 72)
+  fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".png"))
+  # Save the figure as PNG with dimensions in pixels
+  png(file = fullFilePath, width = w, height = h, units = "px")
+  # Render the plot
   print(figure)
   dev.off()
 }
@@ -129,8 +130,33 @@ hm_358<-pheatmap::pheatmap(as.matrix(sampleDists_subset_358),
                            #scale = "row",
                            main="Distance Matrix 358 Cell Line"
                           )
-#savePNG(hm_358, "DistanceMatrix-358")
+library(ComplexHeatmap)
+library(circlize)
+col_fun <- colorRamp2(c(min(sampleDists_subset_358), median(sampleDists_subset_358), max(sampleDists_subset_358)), c("blue", "white", "red"))
+annotation_col <- data.frame(drug = colData_358$drug, cellLine = colData_358$cellLine)
+rownames(annotation_col) <- rownames(colData_358)
 
+# Define annotation colors
+annotation_colors <- list(
+  drug = c("128-10"="#9FD900", "128-13"="#FAA800", "130"="#FC5AA2", "Control"="#696969"),
+  cellLine = c("358"="#006E18")
+)
+
+# Create HeatmapAnnotation object
+ha <- HeatmapAnnotation(df = annotation_col, col = annotation_colors)
+
+# Create and plot the heatmap
+Heatmap(sampleDists_subset_358,
+        name = "Distance",
+        #top_annotation = ha,
+        column_names_rot = 45,  # Rotate the column names by 45 degrees
+        col = col_fun,
+        show_row_names = T,
+        show_column_names = T,
+        heatmap_legend_param = list(title = "Distance"),
+        column_title = "Distance Matrix 358 Cell Line")
+# savePNG(hm_358, "DistanceMatrix-358")
+# savePDF(hm_358, "DM")
 ## creating PCA plot
 pca_358<-plotPCA(rld_358, intgroup="drug")
 # pca<-pca + geom_text(aes(label=name),vjust=2, size = 3)

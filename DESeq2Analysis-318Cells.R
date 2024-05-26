@@ -27,14 +27,15 @@ if(basename(getwd()) == project) "Folder setup correctly" else "Fix folder struc
 output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/v0.41_PerCellLine"
 #-----------
 #Define functions
-savePNG <- function(figure, fileName, h = 1200, w = 900) {
+savePNG <- function(figure, fileName, w = 1200, h = 900) {
   currentDate <- format(Sys.Date(), "%Y%m%d") # current date in YYYYMMDD format
   # Define the directory for saving figures
   figuresDir <- file.path(output_dir, "figures")
   if (!dir.exists(figuresDir)) { dir.create(figuresDir, recursive = TRUE) }
   fullFilePath <- file.path(figuresDir, paste0(currentDate, "_", fileName, ".png"))
   # Save the figure as PNG with dimensions in pixels
-  png(file = fullFilePath, height = h, width = w, units = "px", res = 300)
+  png(file = fullFilePath, width = w, height = h, units = "px")
+  # Render the plot
   print(figure)
   dev.off()
 }
