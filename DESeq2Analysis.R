@@ -69,16 +69,18 @@ getwd()
 output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/v0.4_UnTrimmedNewIndexHierarchicalCategory"
 
 #### Install packages if needed----
-list.of.packages.cran <- c("tidyverse", "devtools", "annotate", "ggrepel", "pheatmap", "RColorBrewer", "EnhancedVolcano")
+list.of.packages.cran <- c("annotate", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
 new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
 if(length(new.packages.cran)>0) install.packages(new.packages.cran)
 # Install not-yet-installed Bioconductor packages
-list.of.packages.bioc <- c("org.Hs.eg.db", "DESeq2", "apeglm","genefilter", "clusterProfiler", "GSVA", "DOSE", "xCell")
+list.of.packages.bioc <- c("apeglm", "clusterProfiler", "DESeq2", "DOSE", "genefilter", "GSVA", "org.Hs.eg.db", "xCell")
 new.packages.bioc <- list.of.packages.bioc[!(list.of.packages.bioc %in% installed.packages()[,"Package"])]
 if(length(new.packages.bioc)>0)if (!requireNamespace("BiocManager")) install.packages("BiocManager")
 BiocManager::install(new.packages.bioc, update = FALSE)
 # Load packages
 sapply(c(list.of.packages.cran, list.of.packages.bioc), require, character.only=TRUE)
+
+#rm(list=ls()) #remove all existing lists
 
 #### Source & Process Input files ----
 colData_file<-paste0(input_dir,"/samplesheet.csv")
@@ -101,7 +103,7 @@ desired_order <- rownames(colData)                    #Order of columns per colD
 fc <- fc %>%
   filter(genes_to_keep) %>%                           # Keep genes with expression in >1 sample
   mutate(EnsembleID = gsub("\\..*$", "", Geneid)) %>% # Add column of removed dot of EnsembleID
-  dplyr::select(7:ncol(.)) %>%                        # Remove the initial columns
+  dplyr::select(7:ncol(.)) %>%                        # Remove the initial columns except length
   arrange(desc(Length)) %>%                           # Order the rows based on gene length
   filter(!duplicated(EnsembleID)) %>%                 # Remove duplicated EnsembleID keep 1st
   dplyr::select(-Length) %>%                          # Remove the Length column
@@ -109,8 +111,17 @@ fc <- fc %>%
 
 # Order the columns according to desired_order
 fc <- fc[, desired_order]
+
 head(fc)
 
+#Check Duplicates in fc
+rows_in_fc <- length(rownames(fc)) #sum(duplicated(rownames(fc)))#number of duplicate EnsembleIDs
+#Number of complete cases based on the EnsembleID (rownames) (not empty, not NA)
+completeEnsembleIDs <- sum(rownames(fc) != "" & !is.na(rownames(fc)))
+if (rows_in_fc == completeEnsembleIDs) "Data OK! No duplicates" else paste(sum(duplicated(rownames(fc))),"Duplicates present")
+
+#Make fc as the countData
+countData <- fc
 
 # fc<-read.delim(fc_file,
 #                row.names=NULL,
@@ -126,11 +137,13 @@ head(fc)
 # desired_order <- rownames(colData)
 # fc <- fc[, desired_order]
 
-if (all(colnames(fc) %in% rownames(colData)) && 
-    all(colnames(fc) == rownames(colData))) "Data ready for DESeq2" else "Data not ready"
+
+
+if (all(colnames(countData) %in% rownames(colData)) && 
+    all(colnames(countData) == rownames(colData))) "Data ready for DESeq2" else "Data not ready"
 
 #### Calculations for DESeq2 ----
-ddsObject <- DESeqDataSetFromMatrix(countData = fc,
+ddsObject <- DESeqDataSetFromMatrix(countData = countData,
                                     colData = colData,
                                     design = ~ cellLine + drug)
 
@@ -169,7 +182,8 @@ head(res)
 #Shrinkage of Log Fold Change using apeglm algorithm
 # We provide the name or number of the coefficient we want to shrink,
 #..where the number refers to the order of the coefficient in the following command
-resultsNames(dds3)
+
+resultsNames(dds) #coef in the lfcShrink should be from the output of this command.
 
 resLFC <- lfcShrink(dds3, coef = "drug_128.10_vs_Control", type = "apeglm")
 
@@ -189,7 +203,7 @@ summary(result0.01)
 sum(result0.01$padj <0.01, na.rm = TRUE)
 
 ###See the comparison group
-resultsNames(dds3)
+resultsNames(dds)
 
 #Specify comparison levels in results to get diferentially expressed results
 #specificContrast <- results(dds3, contrast = c("drug", "Control", "128.10"))
@@ -394,8 +408,28 @@ logFC.l2n <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$FC_pval
 names(logFC.l2n) <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$GeneSymbol
 
 gsea.hall.l2n <- GSEA(logFC.l2n, TERM2GENE=hall, verbose=FALSE, pvalueCutoff=1)
-gsea.hall.l2n.df <- as.data.frame(gsea.hall.l2n@result)
-write.csv(gsea.hall.l2n.df, paste0(outsdir,"/","GSEA_output", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
 
-dp<-dotplot(gsea.hall.l2n, x="NES", showCategory=50, orderBy= "NES",font.size = 7) 
-saveFigure(figure=dp,fileName="HallmarkPathwayAnalysis")
+gsea.hall.l2n@result$Description <- gsub('HALLMARRK_', '', gsea.hall.l2n@result$Description)
+gsea.hall.l2n@result$Description <- gsub('_', ' ', gsea.hall.l2n@result$Description)
+
+# #If Needed to save
+# gsea.hall.l2n.df <- as.data.frame(gsea.hall.l2n@result)
+# write.csv(gsea.hall.l2n.df, paste0(outsdir,"/","GSEA_output", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+
+dotplot(gsea.hall.l2n, 
+            x="NES", 
+            showCategory=50, 
+            orderBy= "NES",
+            #title = "Cohort1 vs Cohort2",
+            font.size = 7) +
+  scale_color_gradient2(limits = c(0, 0.05),
+                        breaks = c(0, 0.05),
+                        labels = c("0.0", "0.05"),
+                        low = "red",
+                        mid = "red",
+                        high = "red",
+                        na.value = "blue") +
+  ggtitle(paste(factor1, "vs", factor2)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# saveFigure(figure=dp,fileName="HallmarkPathwayAnalysis")
