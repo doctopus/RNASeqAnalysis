@@ -1,6 +1,6 @@
-#DESeq2 Vignette
+# Downstream Analysis of RNASeq
 
-#Define Functions########################
+#### Define Functions########################
 # function to create project folder if not same as R Project folder and io folders in it 
 #...project folder could be the R project or within it with the script & io within the project
 setupProject <- function(project) {
@@ -61,14 +61,14 @@ savePNG <- function(figure, fileName, w = 900, h = 1300) {
   dev.off()
 }
 
-####Analysis Specific Code ----
+#### Analysis Specific Code ----
 #Initiate project
 setupProject("RNASeqAnalysis")
 getwd()
 # Project specific override: output folder V0.4 UnTrimmedNewIndexHierarchicalCategory
-output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/v0.4_UnTrimmedNewIndexHierarchicalCategory"
+output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/1.0_HierarchicalCategoryWithPathwayAnalysis"
 
-#### Install packages if needed----
+#### Install & Load Packages ----
 list.of.packages.cran <- c("annotate", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
 new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
 if(length(new.packages.cran)>0) install.packages(new.packages.cran)
@@ -80,7 +80,7 @@ BiocManager::install(new.packages.bioc, update = FALSE)
 # Load packages
 sapply(c(list.of.packages.cran, list.of.packages.bioc), require, character.only=TRUE)
 
-#rm(list=ls()) #remove all existing lists
+#rm(list=ls()) #remove all existing lists; DONT
 
 #### Source & Process Input files ----
 colData_file<-paste0(input_dir,"/samplesheet.csv")
@@ -100,7 +100,7 @@ fc <- read.delim(fc_file, row.names = NULL, check.names = FALSE)
 genes_to_keep <- rowSums(fc[, 8:ncol(fc)]) > 1        #Keep Genes which are expressed 
 desired_order <- rownames(colData)                    #Order of columns per colData
 
-fc <- fc %>%
+fc1 <- fc %>%
   filter(genes_to_keep) %>%                           # Keep genes with expression in >1 sample
   mutate(EnsembleID = gsub("\\..*$", "", Geneid)) %>% # Add column of removed dot of EnsembleID
   dplyr::select(7:ncol(.)) %>%                        # Remove the initial columns except length
@@ -110,18 +110,18 @@ fc <- fc %>%
   column_to_rownames("EnsembleID")                    # Set EnsembleID as row names
 
 # Order the columns according to desired_order
-fc <- fc[, desired_order]
+fc2 <- fc1[, desired_order]
 
-head(fc)
+head(fc2)
 
 #Check Duplicates in fc
-rows_in_fc <- length(rownames(fc)) #sum(duplicated(rownames(fc)))#number of duplicate EnsembleIDs
+rows_in_fc <- length(rownames(fc2)) #sum(duplicated(rownames(fc)))#number of duplicate EnsembleIDs
 #Number of complete cases based on the EnsembleID (rownames) (not empty, not NA)
-completeEnsembleIDs <- sum(rownames(fc) != "" & !is.na(rownames(fc)))
-if (rows_in_fc == completeEnsembleIDs) "Data OK! No duplicates" else paste(sum(duplicated(rownames(fc))),"Duplicates present")
+completeEnsembleIDs <- sum(rownames(fc2) != "" & !is.na(rownames(fc2)))
+if (rows_in_fc == completeEnsembleIDs) "Data OK! No duplicates" else paste(sum(duplicated(rownames(fc2))),"Duplicates present")
 
 #Make fc as the countData
-countData <- fc
+countData <- fc2
 
 # fc<-read.delim(fc_file,
 #                row.names=NULL,
@@ -152,7 +152,7 @@ ddsObject <- DESeqDataSetFromMatrix(countData = countData,
 # So 12 would be a good minimal number of samples.
 # So row sum of minimal number of samples should have more than 10 reads at least
 smallestGroupSize <- 12
-counts(ddsObject)
+#counts(ddsObject)
 #keep <-  rowSums(counts(dds2))>= 10
 keep <-  rowSums(counts(ddsObject)>= 10) >= smallestGroupSize
 
@@ -168,24 +168,58 @@ ddsObject_filtered$drug <- droplevels(ddsObject_filtered$drug) #remove the level
 # ...which do not have samples in the current data set. Here nothing removed
 dds <- DESeq(ddsObject_filtered)
 
+# DDS Quality Control (Optional)----
 ## Total number of raw counts per sample
 colSums(counts(dds))
 ## Total number of normalized counts per sample
 colSums(counts(dds, normalized=T))
 
-#The results function without any argument will make log fold change
-#...and p values for the last variable. In this case drugs
+#The results function without any argument will make log fold change & p values
+#...for the last variable in design formula, between defined reference (Control) and last factor in it.
 res <- results(dds)
 head(res)
-#We can optionally specify the coefficient or contrast to compare against
-#========Need to do if needed for QC
-#Shrinkage of Log Fold Change using apeglm algorithm
+
+# The result function will by default pull the last variable in design (drug)
+#...unless "name" or "contrast" argument is provided as follows.
+
+#To define contrast pairs in the results argument as follows
+resControlx128.10 <- results(dds, contrast = c("drug", "128-10", "Control"))
+head(resControlx128.10)
+
+#Alternatively pick a cobination from 
+resultsNames(dds)
+
+resControlx128.13 <- results(dds, name="drug_128.13_vs_Control")
+head(resControlx128.13)
+
+# Visualize the result to detect distribution anomaly
+plotMA(res, ylim = c(-3, 3))
+hist(res$pvalue, breaks=20, col="grey")
+hist(res$padj, breaks=20, col="grey")
+
+# Since we want rank and visualization, shrink data by either apeglm, ashr or "normal" algorithm
 # We provide the name or number of the coefficient we want to shrink,
 #..where the number refers to the order of the coefficient in the following command
+# coef in the lfcShrink should be from the output of this command: resultsNames(dds)
 
-resultsNames(dds) #coef in the lfcShrink should be from the output of this command.
+# See the comparison groups
+resultsNames(dds)
 
-resLFC <- lfcShrink(dds3, coef = "drug_128.10_vs_Control", type = "apeglm")
+resLFCapeglm <- lfcShrink(dds, coef = "drug_130_vs_Control", type = "apeglm")
+resLFCnormal <- lfcShrink(dds, coef = "drug_130_vs_Control", type = "normal")
+
+#Plot dispersion estimate
+plotDispEsts(dds)
+
+#MA Plot
+plotMA(res)
+#plotMA(resOrdered)
+
+#It is more useful to visualize the shrunken log2 fold changes
+#..which remove the noise associated with log2 fold changes from low 
+#..count genes without requiring arbitrary filtering
+plotMA(resLFCapeglm)
+plotMA(resLFCnormal)
 
 #Order the result table by smallest p value:
 resOrdered <- res[order(res$pvalue),]
@@ -197,21 +231,20 @@ sum(res$padj <0.1, na.rm = TRUE)
 
 
 #To change the adjusted p-value cut off change alpha
-result0.01 <- results(dds3, alpha=0.01)
+result0.01 <- results(dds, alpha=0.01)
 summary(result0.01)
 #How many adjusted p-values were less than 0.01?
 sum(result0.01$padj <0.01, na.rm = TRUE)
 
-###See the comparison group
-resultsNames(dds)
 
-#Specify comparison levels in results to get diferentially expressed results
+#Specify comparison levels in results to get deferentially expressed results
 #specificContrast <- results(dds3, contrast = c("drug", "Control", "128.10"))
 #specificContrast
 #Filter to find significant changes
 #sigs <- na.omit (specificContrast)
 #sigs <- sigs[sigs$padj <0.05,]
-#============
+
+
 #Counts of any single Gene (here, gene with min padj value)gene=which.min(res$padj) OR "ENSG00000197355"
 plotCount <- plotCounts(dds, gene=which.min(res$padj), intgroup = "drug", returnData = TRUE)
 ggplot(plotCount, aes(x=drug, y=count, color =drug))+
@@ -221,41 +254,43 @@ ggplot(plotCount, aes(x=drug, y=count, color =drug))+
   ggtitle("UAP1L1 Gene Expression")+
   theme(plot.title = element_text(hjust = 0.5))
 
-#MA Plot
-plotMA(res, ylim=c(-2, 2))
-#plotMA(resOrdered)
 
-#It is more useful to visualize the shrunken log2 fold changes
-#..which remove the noise associated with log2 fold changes from low 
-#..count genes without requiring arbitrary filtering
-plotMA(resLFC)
 
-#Estimate dispersion trend and apply variance stabilizing transformation
+# DDS Calculation ----
+# Apply transformation & estimate dispersion trend
+# RLT: Regularized Log Transformation
+# VST: Variance Stabilizing Transformation
+
 vsd <- vst(dds, blind = FALSE)
 rld <- rlog(dds, blind=FALSE)
-head(assay(vsd), 3)
+head(assay(vsd), 2)
+head(assay(rld), 2)
 
 #PCA Plot using VSD Transformation
-plotPCAvst <- plotPCA(vsd, intgroup = "drug", returnData=FALSE)
-plotPCAvstData <- plotPCA(vsd, intgroup="drug", returnData=TRUE)
-pca_repel <- plotPCAvst+geom_label_repel(data=plotPCAvstData, aes(label=name))+
-  ggtitle(label="PCA plot of All Cells")+
+# Argument in plotPCA ntop=length(vsd)) to include all genes; 
+#...default is ntop=500, to plot top feature variance
+plotPCAvst <- plotPCA(vsd, intgroup = "drug", returnData=FALSE, ntop=length(vsd)) 
+plotPCAvstData <- plotPCA(vsd, intgroup="drug", returnData=TRUE, ntop=length(vsd))
+pcaVST <- plotPCAvst+geom_label_repel(data=plotPCAvstData, aes(label=name))+
+  ggtitle(label="PCA plot of All Cells: VST Transformed Data")+
   theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
 
-savePNG(figure=pca_repel, fileName = "PCAPlot_Repel", h=1200, w=900)
-savePDF(figure=pca_repel, fileName = "PCAPlot_Repel", h=12, w=9)
+# savePNG(figure=pca_repel, fileName = "PCAPlot_Repel", h=1200, w=900)
+# savePDF(figure=pca_repel, fileName = "PCAPlot_Repel", h=12, w=9)
 
-#PCA Plot using RLOG Transformation
-plotPCArld(rld, intgroup="drug") #Almost a similar plot
+#PCA Plot using RLOG Transformation #Almost a similar plot
+plotPCArld <- plotPCA(rld, intgroup="drug", returnData=FALSE, ntop=length(rld)) 
+plotPCArldData <- plotPCA(rld, intgroup="drug", returnData=TRUE, ntop=length(rld)) 
+pcaRLD <- plotPCArld+geom_label_repel(data=plotPCArldData, aes(label=name))+
+  ggtitle(label="PCA plot of All Cells: RLT Transformed Data")+
+  theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
 
-#Plot dispersion estimate
-plotDispEsts(dds)
 
 #Plot Heatmmap of Hierarchical Clustering
-rld_mat <- assay(rld) #Extract the trasnformed matrix from the object
+rld_mat <- assay(rld) #Extract the transformed matrix from the object
 rld_cor <- cor(rld_mat) #Compute pairwise correlation values
 head(rld_cor)
-heat.colors <- RColorBrewer::brewer.pal(6, "Blues")
+heat.colors <- RColorBrewer::brewer.pal(6, "BrBG")
 pheatmap(rld_cor, annotation=colData, color = heat.colors, border_color = NA,
          fontsize = 10, fontsize_row = 10, height = 20)
 
@@ -264,9 +299,11 @@ pheatmap(rld_cor, annotation=colData, color = heat.colors, border_color = NA,
 #my_colors <- colorRampPalette(c("blue", "white", "red"))(99)
 my_colors <- colorRampPalette(c("white", "#FF7B2A"))(99)
 
-
+#------------------
 # Extract Transformed values
-rld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformationrld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformation
+#rld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformationrld<-vst(dds)
+# Using rld transformed data for the analysis [rld <- rlog(dds)]
+length(rld)
 
 ## creating distance matrix
 sampleDists_subset <- as.matrix(dist(t(assay(rld))))
@@ -275,17 +312,26 @@ hm<-pheatmap::pheatmap(as.matrix(sampleDists_subset),
                        col=my_colors,
                        annotation_legend=TRUE)
 
-## creating PCA plot
-pca<-plotPCA(rld, intgroup="drug")
+## creating PCA plot using RLD for default top 500 genes
+pcaRLD500<-plotPCA(rld, intgroup="drug", returnData=FALSE)
 # pca<-pca + geom_text(aes(label=name),vjust=2, size = 3)
 # saveFigure(figure=pca,fileName="PCAPlot",h=10,w=20)
 #If needs to label samples using ggrepel
-library(ggrepel)
-zz <- plotPCA(rld, intgroup="drug", returnData=TRUE)
-pca_repel <- pca+geom_label_repel(data=zz, aes(label=name))+
-  ggtitle(label="PCA plot of 318 Cells")+
-  theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
-
+#library(ggrepel)
+pcaRLD500Data <- plotPCA(rld, intgroup="drug", returnData=TRUE)
+pca <- pcaRLD500 + geom_label_repel(data=pcaRLD500Data, aes(label=name))+
+  ggtitle(label="PCA Plot All Cells (Top 500 Genes)")+
+  theme(plot.title = element_text(hjust = 0.5, 
+                                  size = 12, 
+                                  face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "bottom",
+        strip.background = element_blank(),
+        axis.text = element_text(size = 10)
+        #panel.border = element_rect(color="black"),
+        )
+print(pca)
 #saveFigure(figure=pca_repel318, fileName = "PCAPlot_Repel", h=15, w=20)
 colData(dds)
 
@@ -298,8 +344,107 @@ resultsNames(dds)
 e <- as.character(c(ComparisonColumn, factor1, factor2))
 res <- lfcShrink(dds, contrast = e, type = "normal")
 
-resdata_subset <- merge(as.data.frame(res), as.data.frame(assay(rld)), by="row.names", sort=FALSE)
-write.csv(resdata_subset, paste0(output_dir,"/","DifferentialExpressionAnalysis", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+
+#TODO X and Y are not same. Investigate: "The assay function extracts the matrix of normalized values
+x <- as.data.frame(assay(rld)) #Transformed Normalized
+y <- as.data.frame(counts(dds, normalized=TRUE)) #Only Normalized
+
+r <- as.data.frame(res) #Shrinked Result (L2FC, padj etc) based on "normal" algorithm
+
+
+#==========AmCodeStart (Heatmap Based On Counts)
+resdata <- merge(as.data.frame(res), as.data.frame(counts(dds, normalized=FALSE)),
+                 by = "row.names",
+                 sort = FALSE)
+names(resdata)[1] <- "EnsembleID"
+resdata <- resdata[order(resdata$padj),]
+resdata <- resdata[complete.cases(resdata$padj),]
+#Get Bioconductor Annotation Database
+sp <- org.Hs.eg.db
+
+resdata$Gene<- mapIds(sp, keys=resdata$EnsembleID, column=c("SYMBOL"), keytype="ENSEMBL", multiVals="first")
+
+resdata <- resdata[complete.cases(resdata$Gene),]
+resdata <- resdata[!duplicated(resdata$Gene),]
+resdata <- resdata[order(resdata$log2FoldChange),]
+
+#Heatmap of Top/Botttom 25 Log Fold Change Genes
+Top25Down <- head(resdata, 25)
+Top25Up <- tail(resdata, 25)
+Top25 <- rbind(Top25Down, Top25Up)
+
+A <- as.character(rownames(colData))
+AG<-c(A, "Gene")
+Top25<-Top25 %>% dplyr::select(all_of(AG))
+Top25<-data.frame(Top25, check.names = FALSE)
+rownames(Top25)<-Top25$Gene
+Top25 <- Top25 %>% dplyr::select(all_of(A))
+
+annotation_colors = list(Cohort = c("1"="red","2"="skyblue"),Region = c(NK="skyblue", TC="gold", TD="green", TN="red"))
+icolors <- colorRampPalette(c("blue","white","red"))(99)
+
+#Keep only the compared columns
+# Find the column names that contain either factor1 or factor2
+columns_to_keep <- grep(paste(factor1, factor2, sep = "|"), names(Top25), value = TRUE)
+
+# Subset the data frame to keep only those columns
+Top25 <- Top25[, columns_to_keep] %>% as.matrix(.)
+
+
+pheatmap::pheatmap(Top25,
+         scale="row",
+         annotation=colData,
+         cluster_cols=T,
+         cluster_rows=T,
+         #annotation_colors = annotation_colors,
+         cellwidth=10,
+         annotation_legend =TRUE,
+         color= icolors, 
+         annotation_colors = list(drug=c(#"128-10"="#48B2F9",
+                                         #"128-13"="#FAA800",
+                                         "130"="#FC5AA2",
+                                         "Control"="#9FD900"),
+                                  cellLine=c("318"="#6500B1",
+                                             "358"="#006E18")),
+         fontsize_row = 5,
+         main="Top 50 FoldChange Control vs 130")
+
+## Complex Heat Map Code
+library(ComplexHeatmap)
+library(circlize)
+col_fun <- colorRamp2(c(min(Top25), median(Top25), max(Top25)), c("blue", "white", "red"))
+annotation_col <- data.frame(drug = colData$drug, cellLine = colData$cellLine)
+rownames(annotation_col) <- rownames(colData_358)
+
+# Define annotation colors
+annotation_colors <- list(
+  drug = c("128-10"="#9FD900", "128-13"="#FAA800", "130"="#FC5AA2", "Control"="#696969"),
+  cellLine = c("358"="#006E18")
+)
+
+# Create HeatmapAnnotation object
+ha <- HeatmapAnnotation(df = annotation_col, col = annotation_colors)
+
+# Create and plot the heatmap
+Heatmap(sampleDists_subset_358,
+        name = "Distance",
+        #top_annotation = ha,
+        column_names_rot = 45,  # Rotate the column names by 45 degrees
+        col = col_fun,
+        show_row_names = T,
+        show_column_names = T,
+        heatmap_legend_param = list(title = "Distance"),
+        column_title = "Distance Matrix 358 Cell Line")
+
+# ggtitle(paste(factor1, "vs", factor2)) +
+#   theme(plot.title = element_text(hjust = 0.5))
+
+#==========AmCodeEnd
+
+resdata_subset <- merge(as.data.frame(res), as.data.frame(assay(rld)), 
+                        by="row.names", 
+                        sort=FALSE)
+# write.csv(resdata_subset, paste0(output_dir,"/","DifferentialExpressionAnalysis", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
 names(resdata_subset)[1] <- "Gene" #Renaming EnsembleID column as Gene
 # resdata_subset <- resdata_subset[order(resdata_subset$padj),]
 # resdata_subset <- resdata_subset[!is.na(resdata_subset$padj),]
