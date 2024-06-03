@@ -69,11 +69,11 @@ getwd()
 output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/1.0_HierarchicalCategoryWithPathwayAnalysis"
 
 #### Install & Load Packages ----
-list.of.packages.cran <- c("annotate", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
+list.of.packages.cran <- c("annotate", "circlize", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
 new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
 if(length(new.packages.cran)>0) install.packages(new.packages.cran)
 # Install not-yet-installed Bioconductor packages
-list.of.packages.bioc <- c("apeglm", "clusterProfiler", "DESeq2", "DOSE", "genefilter", "GSVA", "org.Hs.eg.db", "xCell")
+list.of.packages.bioc <- c("apeglm", "clusterProfiler", "ComplexHeatmap", "DESeq2", "DOSE", "genefilter", "GSVA", "org.Hs.eg.db", "xCell")
 new.packages.bioc <- list.of.packages.bioc[!(list.of.packages.bioc %in% installed.packages()[,"Package"])]
 if(length(new.packages.bioc)>0)if (!requireNamespace("BiocManager")) install.packages("BiocManager")
 BiocManager::install(new.packages.bioc, update = FALSE)
@@ -254,8 +254,6 @@ ggplot(plotCount, aes(x=drug, y=count, color =drug))+
   ggtitle("UAP1L1 Gene Expression")+
   theme(plot.title = element_text(hjust = 0.5))
 
-
-
 # DDS Calculation ----
 # Apply transformation & estimate dispersion trend
 # RLT: Regularized Log Transformation
@@ -339,20 +337,34 @@ colData(dds)
 #### Plotting DEG
 ComparisonColumn <- "drug"
 factor1 <- "Control"
-factor2 <- "130"
-resultsNames(dds)
+factor2 <- "128-13"
+# resultsNames(dds)
 e <- as.character(c(ComparisonColumn, factor1, factor2))
 res <- lfcShrink(dds, contrast = e, type = "normal")
 
+annotation_colors <- list(
+  drug = c("128-10"="#9FD900", 
+           "128-13"="#FAA800", 
+              "130"="#ff5d8f", 
+          "Control"="#6c757d"),
+  
+  cellLine =c("358"="#006E18", 
+            "318" = "#832161")
+)
+icolors <- colorRampPalette(c("blue",
+                              "white",
+                              "red"))(99)
+
+title <- paste("Top 50 Fold Change:", factor1, "vs", factor2)
 
 #TODO X and Y are not same. Investigate: "The assay function extracts the matrix of normalized values
-x <- as.data.frame(assay(rld)) #Transformed Normalized
-y <- as.data.frame(counts(dds, normalized=TRUE)) #Only Normalized
+# x <- as.data.frame(assay(rld)) #Transformed Normalized
+# y <- as.data.frame(counts(dds, normalized=TRUE)) #Only Normalized
+# 
+# r <- as.data.frame(res) #Shrinked Result (L2FC, padj etc) based on "normal" algorithm
 
-r <- as.data.frame(res) #Shrinked Result (L2FC, padj etc) based on "normal" algorithm
 
-
-#==========AmCodeStart (Heatmap Based On Counts)
+#==========AmCodeStart (Heatmap Based On Counts)----
 resdata <- merge(as.data.frame(res), as.data.frame(counts(dds, normalized=FALSE)),
                  by = "row.names",
                  sort = FALSE)
@@ -380,66 +392,126 @@ Top25<-data.frame(Top25, check.names = FALSE)
 rownames(Top25)<-Top25$Gene
 Top25 <- Top25 %>% dplyr::select(all_of(A))
 
-annotation_colors = list(Cohort = c("1"="red","2"="skyblue"),Region = c(NK="skyblue", TC="gold", TD="green", TN="red"))
-icolors <- colorRampPalette(c("blue","white","red"))(99)
-
 #Keep only the compared columns
 # Find the column names that contain either factor1 or factor2
 columns_to_keep <- grep(paste(factor1, factor2, sep = "|"), names(Top25), value = TRUE)
 
 # Subset the data frame to keep only those columns
-Top25 <- Top25[, columns_to_keep] %>% as.matrix(.)
+Top25 <- Top25[, columns_to_keep] #%>% as.matrix(.)
+
+# Filter the colData to keep only those rows
+colData25 <- colData[columns_to_keep, ]
+
+# Order the columns by 'drug'
+ordered_indices <- order(colData25$drug, decreasing = TRUE)
+Top25_ordered <- Top25[, ordered_indices]
+colData25_ordered <- colData25[ordered_indices, ]
 
 
-pheatmap::pheatmap(Top25,
+
+# Filter annotation colors to include only relevant levels
+annotation_colors_filtered <- list(
+  drug = annotation_colors$drug[names(annotation_colors$drug) %in% unique(colData25_ordered$drug)],
+  cellLine = annotation_colors$cellLine[names(annotation_colors$cellLine) %in% unique(colData25_ordered$cellLine)]
+)
+pheatmap::pheatmap(Top25_ordered,
          scale="row",
-         annotation=colData,
-         cluster_cols=T,
+         annotation=colData25_ordered,
+         cluster_cols=F,
          cluster_rows=T,
-         #annotation_colors = annotation_colors,
+         annotation_colors = annotation_colors_filtered,
          cellwidth=10,
          annotation_legend =TRUE,
-         color= icolors, 
-         annotation_colors = list(drug=c(#"128-10"="#48B2F9",
-                                         #"128-13"="#FAA800",
-                                         "130"="#FC5AA2",
-                                         "Control"="#9FD900"),
-                                  cellLine=c("318"="#6500B1",
-                                             "358"="#006E18")),
+         color= icolors,
          fontsize_row = 5,
-         main="Top 50 FoldChange Control vs 130")
+         main=title)
 
-## Complex Heat Map Code
-library(ComplexHeatmap)
-library(circlize)
-col_fun <- colorRamp2(c(min(Top25), median(Top25), max(Top25)), c("blue", "white", "red"))
-annotation_col <- data.frame(drug = colData$drug, cellLine = colData$cellLine)
-rownames(annotation_col) <- rownames(colData_358)
+## Complex Heat Map Code----
+# library(ComplexHeatmap)
+# library(circlize)
 
-# Define annotation colors
-annotation_colors <- list(
-  drug = c("128-10"="#9FD900", "128-13"="#FAA800", "130"="#FC5AA2", "Control"="#696969"),
-  cellLine = c("358"="#006E18")
+# col_fun <- colorRamp2(c(min(Top25), median(Top25), max(Top25)), c("blue", "white", "red"))
+# Adjust color mapping to ensure proper visualization
+col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
+title <- paste("Top 50 Fold Change:", factor1, "vs", factor2)
+
+
+# Ensure the 'drug' column in colData is a factor with the correct order
+#colData$drug <- factor(colData25$drug, levels = c("Control", "130"))
+# Order the columns by 'drug'
+ordered_indices <- order(colData25$drug, decreasing = TRUE)
+Top25_ordered <- Top25[, ordered_indices]
+colData25_ordered <- colData25[ordered_indices, ]
+
+# Filter annotation colors to include only relevant levels
+annotation_colors_filtered <- list(
+  drug = annotation_colors$drug[names(annotation_colors$drug) %in% unique(colData25_ordered$drug)],
+  cellLine = annotation_colors$cellLine[names(annotation_colors$cellLine) %in% unique(colData25_ordered$cellLine)]
 )
 
-# Create HeatmapAnnotation object
-ha <- HeatmapAnnotation(df = annotation_col, col = annotation_colors)
+# Create the combined column annotations with drug above cellLine
+ha_combined <- HeatmapAnnotation(
+  df = data.frame(drug = colData25_ordered$drug, cellLine = colData25_ordered$cellLine),
+  col = annotation_colors_filtered,
+  annotation_name_side = "right",
+  show_annotation_name = TRUE,
+  annotation_name_gp = gpar(fontsize = 12, fontface = "bold"),
+  show_legend = T # Disable legends in the annotation to custom order the legends using library(grid)
+)
 
-# Create and plot the heatmap
-Heatmap(sampleDists_subset_358,
-        name = "Distance",
-        #top_annotation = ha,
-        column_names_rot = 45,  # Rotate the column names by 45 degrees
-        col = col_fun,
-        show_row_names = T,
-        show_column_names = T,
-        heatmap_legend_param = list(title = "Distance"),
-        column_title = "Distance Matrix 358 Cell Line")
+# Scale the rows
+Top25_scaled <- t(scale(t(Top25_ordered)))
 
-# ggtitle(paste(factor1, "vs", factor2)) +
-#   theme(plot.title = element_text(hjust = 0.5))
 
-#==========AmCodeEnd
+# Create the heatmap
+hm25 <- Heatmap(
+  Top25_scaled,
+  name = "Expression",
+  cluster_rows = T,
+  cluster_columns = F,
+  col = col_fun,
+  top_annotation = ha_combined,
+  column_title = title,
+  row_names_gp = gpar(fontsize = 5),
+  column_names_gp = gpar(fontsize = 10),
+  #column_split = colData25$drug,
+  column_names_rot = 45,
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "grey", lwd = 0.5))
+  }
+) 
+# Optional: Customize the legend orders
+# library(grid)
+# Create custom legends for each annotation
+legend_drug <- Legend(
+  at = rev(names(annotation_colors_filtered$drug)),
+  labels = rev(names(annotation_colors_filtered$drug)),
+  title = "Drug",
+  legend_gp = gpar(fill = rev(annotation_colors_filtered$drug))
+)
+
+legend_cellLine <- Legend(
+  at = names(annotation_colors_filtered$cellLine),
+  labels = names(annotation_colors_filtered$cellLine),
+  title = "Cell Line",
+  legend_gp = gpar(fill = annotation_colors_filtered$cellLine)
+)
+
+# Combine the legends in the desired order
+legends <- packLegend(legend_drug, legend_cellLine)
+
+# Draw the heatmap with custom legends
+draw(hm25, heatmap_legend_side = "right", annotation_legend_side = "right", annotation_legend_list = legends)
+
+
+
+
+
+
+
+
+
+#==========AmCodeEnd----
 
 resdata_subset <- merge(as.data.frame(res), as.data.frame(assay(rld)), 
                         by="row.names", 
@@ -453,12 +525,12 @@ resdata_subset <- resdata_subset %>%
   arrange(padj)
 
 #Get Bioconductor Annotation Database
-sp <- org.Hs.eg.db
+# sp <- org.Hs.eg.db
 
 
 resdata_subset$GeneSymbol<- mapIds(sp, keys=resdata_subset$Gene, column=c("SYMBOL"), keytype="ENSEMBL", multiVals="first")
 resdata_subset$EntrezID<- mapIds(sp, keys=resdata_subset$Gene, column=c("ENTREZID"), keytype="ENSEMBL", multiVals="first")
-write.csv(resdata_subset, paste0(output_dir,"/","DifferentialExpressionAnalysis_cleaned", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+# write.csv(resdata_subset, paste0(output_dir,"/","DifferentialExpressionAnalysis_cleaned", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
 
 resdatagenes_subset <- resdata_subset[complete.cases(resdata_subset$GeneSymbol),]
 resdatagenes_subset <- resdatagenes_subset[!duplicated(resdatagenes_subset$GeneSymbol), ]
@@ -467,8 +539,8 @@ resdatagenes_subset <- resdatagenes_subset[order(resdatagenes_subset$log2FoldCha
 
 #↑Resdatagenes last modification
 
-Top50genesdown_subset<-head(resdatagenes_subset, 50)
-Top50genesup_subset<-tail(resdatagenes_subset, 50)
+Top50genesdown_subset<-head(resdatagenes_subset, 25)
+Top50genesup_subset<-tail(resdatagenes_subset, 25)
 Top_subset<-rbind(Top50genesdown_subset, Top50genesup_subset)
 
 
@@ -476,7 +548,6 @@ R <- as.character(rownames(colData))
 R<-c(R, "GeneSymbol")
 Top_subset<-Top_subset %>% dplyr::select(all_of(R))
 TopD_subset<-data.frame(Top_subset, check.names = FALSE)
-#name the rows as genesymbols
 rownames(TopD_subset)<-Top_subset$GeneSymbol
 
 #Keep only the compared columns
@@ -486,23 +557,42 @@ columns_to_keep <- grep(paste(factor1, factor2, sep = "|"), names(TopD_subset), 
 # Subset the data frame to keep only those columns
 Top50_f1vsf2 <- TopD_subset[, columns_to_keep]
 
+# Filter the colData to keep only those rows
+colData25 <- colData[columns_to_keep, ]
 
+# Order the columns by 'drug'
+ordered_indices <- order(colData25$drug, decreasing = TRUE)
+Top50_f1vsf2_ordered <- Top50_f1vsf2[, ordered_indices]
+colData25_ordered <- colData25[ordered_indices, ]
+
+
+#Save for Venn Diagram Analysis
+row_names <- rownames(Top50_f1vsf2_ordered)
+# T50Control_130 <- data.frame(matrix(ncol = 1, nrow = length(row_names)))
+# T50Control_130 <- data.frame(ColumnNames = column_names)
+# T50Control_130 <- data.frame(Control_130 = row_names)
+#T50Control_128.10 <- data.frame(Control_128.10 = row_names)
+T50Control_128.13 <- data.frame(Control_128.13 = row_names)
+head(T50Control_130)
+
+# Filter annotation colors to include only relevant levels
+annotation_colors_filtered <- list(
+  drug = annotation_colors$drug[names(annotation_colors$drug) %in% unique(colData25_ordered$drug)],
+  cellLine = annotation_colors$cellLine[names(annotation_colors$cellLine) %in% unique(colData25_ordered$cellLine)]
+)
 ## top 50 fold changes
-hmt50f1vsf2<-pheatmap::pheatmap(Top50_f1vsf2, scale="row", 
-                              annotation_col=colData,
-                              annotation_legend =TRUE, 
-                              color= colorRampPalette(c("blue","white","red"))(99), 
-                              annotation_colors = list(drug=c("128-10"="#48B2F9",
-                                                             "128-13"="#FAA800",
-                                                                "130"="#FC5AA2",
-                                                             "Control"="#9FD900"),
-                                                      cellLine=c("318"="#6500B1",
-                                                                 "358"="#006E18")),
-                              fontsize_row = 8, 
+hmt50f1vsf2<-pheatmap::pheatmap(Top50_f1vsf2_ordered, scale="row", 
+                              annotation_col=colData25_ordered,
+                              annotation=colData25_ordered, 
                               cluster_cols = F,
                               cluster_rows = T,
-                              main="Top 50 FoldChange - Control vs 128-13")
-saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128-13",h=12,w=12)
+                              cellwidth=10,
+                              annotation_legend =TRUE, 
+                              color= icolors,
+                              annotation_colors = annotation_colors_filtered,
+                              fontsize_row = 8,
+                              main=title)
+# saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128-13",h=12,w=12)
 
 
 ## variable genes
@@ -517,22 +607,17 @@ mat <- mat - rowMeans(mat)
 
 #plot the variable genes in heatmap
 hmVariable<-pheatmap::pheatmap(mat,
-                                  annotation_col=colData,
-                                  color= colorRampPalette(c("#1A1AFF","white","#FF1A1A"))(99), 
-                                  annotation_colors = list(drug=c("128-10"="#48B2F9", 
-                                                                  "128-13"="#FAC000",
-                                                                      "130"="#FC5AA2",
-                                                                  "Control"="#9FD900"),
-                                                           cellLine=c("318"="#6500B1",
-                                                                      "358"="#006E18")),
-                                  annotation_legend =TRUE, 
-                                  scale="row", 
-                                  fontsize_row = 8, 
-                                  show_rownames=T, 
-                                  cluster_rows = T,
-                                  cluster_cols = T,
-                                  main="Top100 Variable Genes - All Cell Line")
-saveFigure(figure=hmVariable,fileName="Top100VariableGenes All Cell Lines",h=12,w=12)
+                      annotation_col=colData,
+                      color= icolors, 
+                      annotation_colors = annotation_colors,
+                      annotation_legend =TRUE, 
+                      scale="row", 
+                      fontsize_row = 8, 
+                      show_rownames=T, 
+                      cluster_rows = T,
+                      cluster_cols = F,
+                      main="Top100 Variable Genes - All Cell Line")
+# saveFigure(figure=hmVariable,fileName="Top100VariableGenes All Cell Lines",h=12,w=12)
 
 # Volcano Plot
 vp<-EnhancedVolcano(resdata_subset,
@@ -541,40 +626,315 @@ vp<-EnhancedVolcano(resdata_subset,
                        pCutoff = 10e-4,
                        FCcutoff = 1)
 
+########################################
 #Pathway Analysis With Hallmark Geneset
+########################################
+#SKIP-STARTS=== Skip this section if part of the same code
+  #GET-DDS
+  ddsObject <- DESeqDataSetFromMatrix(countData = countData,
+                                      colData = colData,
+                                      design = ~ cellLine + drug)
+  #Keep roows with >10 reads per smallest group of analysis
+  smallestGroupSize <- 12
+  #keep <-  rowSums(counts(dds2))>= 10
+  keep <-  rowSums(counts(ddsObject)>= 10) >= smallestGroupSize
+  ddsObject_filtered <- ddsObject[keep,]
+  #Relevel the Drug to define Control
+  ddsObject_filtered$drug <- relevel(ddsObject_filtered$drug, ref="Control")
+  #Drop the level of drug which does not have samples (if any)
+  ddsObject_filtered$drug <- droplevels(ddsObject_filtered$drug) #remove the levels (of drug) 
+  dds <- DESeq(ddsObject_filtered)
+  #GET-RLD
+  # Apply transformation & estimate dispersion trend
+  # RLT: Regularized Log Transformation
+  # VST: Variance Stabilizing Transformation
+  #vsd <- vst(dds, blind = FALSE)
+  rld <- rlog(dds, blind=FALSE)
+#SKIP-ENDS=== Skip this section if part of the same code
+
+  
+ComparisonColumn <- "drug"
+factor1 <- "Control"
+factor2 <- "128-10"
+title_pathway <- paste("Significant Differential Pathways:", factor1, "vs", factor2)
+# resultsNames(dds)
+e <- as.character(c(ComparisonColumn, factor1, factor2))
+#Shrink dds based on comparison data
+res <- lfcShrink(dds, contrast = e, type = "normal")
+#Combine shrunk results (with lfc, padj etc with normalized count data)
+resdata <- merge(as.data.frame(res), #Get the counts data alongwith the comparison results
+                 #as.data.frame(counts(dds, normalized=FALSE)), #Get original count data for each set
+                 as.data.frame(assay(rld)), #Get transformed count values for each set
+                 by = "row.names",
+                 sort = FALSE)
+  
+names(resdata)[1] <- "EnsembleID" #Rename the first column (Row.names) as EnsembleID
+#Get Bioconductor Annotation Database
+sp <- org.Hs.eg.db
+
+#Add a column of Gene translated from EnsembleID
+resdata$Gene<- mapIds(sp, 
+                      keys=resdata$EnsembleID, 
+                      column=c("SYMBOL"), 
+                      keytype="ENSEMBL", 
+                      multiVals="first")
+
+resdata <- resdata[order(resdata$padj),] #Order by ascending p-adj significance;low p =significant at top
+resdata <- resdata[complete.cases(resdata$padj),] #Keep rows which have p-adj data
+resdata <- resdata[complete.cases(resdata$Gene),] #Remove rows that don't have assigned genes
+resdata <- resdata[!duplicated(resdata$Gene),] #Remove rows with same gene, keeping significant ones (low padj)
+resdata <- resdata[order(resdata$log2FoldChange),] #Now order per log2FoldChange
+#Pick top and bottom most significant DEGs
+#Skipped
+  
+#Pathway Analysis
 human_hall_file<-paste0(input_dir,"/GSEA/h.all.v2023.2.Hs.symbols.gmt")
-hall <- read.gmt(human_hall_file)
+genesets <- read.gmt(human_hall_file)
 
-resdatagenes_gsea <- resdatagenes_subset
-resdatagenes_gsea <- resdatagenes_gsea[!is.na(resdatagenes_gsea$log2FoldChange),]
-resdatagenes_gsea <- resdatagenes_gsea[order(-resdatagenes_gsea$log2FoldChange),]
-resdatagenes_gsea$FC_pval <- (resdatagenes_gsea$log2FoldChange)
-logFC.l2n <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$FC_pval
-names(logFC.l2n) <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$GeneSymbol
+resdata_gsea <- resdata
+resdata_gsea <- resdata_gsea[!is.na(resdata_gsea$log2FoldChange),] #Remove rows without log2fc data
+ordered_data <- resdata_gsea[order(-resdata_gsea$log2FoldChange),] #Order by decreasing log2fc
 
-gsea.hall.l2n <- GSEA(logFC.l2n, TERM2GENE=hall, verbose=FALSE, pvalueCutoff=1)
+logFC <- ordered_data$log2FoldChange #Take the log2FC column only
+names(logFC) <- ordered_data$Gene #Assign Row names as their corresponding Gene
 
-gsea.hall.l2n@result$Description <- gsub('HALLMARRK_', '', gsea.hall.l2n@result$Description)
-gsea.hall.l2n@result$Description <- gsub('_', ' ', gsea.hall.l2n@result$Description)
+#If need to plot a known list of genes (intersection123) NOT POSSIBLE SINCE LIST IS TOO SMALL
+#intersectionDEGs <- intersection123 #Intersection Genes among Top DEG between comparison groups
+#logFC_filtered <- logFC[names(logFC) %in% intersectionDEGs] #keep rows where gene names are in intersectionDEGs
 
-# #If Needed to save
-# gsea.hall.l2n.df <- as.data.frame(gsea.hall.l2n@result)
-# write.csv(gsea.hall.l2n.df, paste0(outsdir,"/","GSEA_output", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+#print(logFC_filtered[1:10])
 
-dotplot(gsea.hall.l2n, 
-            x="NES", 
-            showCategory=50, 
-            orderBy= "NES",
-            #title = "Cohort1 vs Cohort2",
-            font.size = 7) +
-  scale_color_gradient2(limits = c(0, 0.05),
-                        breaks = c(0, 0.05),
-                        labels = c("0.0", "0.05"),
-                        low = "red",
-                        mid = "red",
-                        high = "red",
-                        na.value = "blue") +
+gsea_hallmark <- GSEA(logFC, 
+                      TERM2GENE=genesets, 
+                      verbose=TRUE, 
+                      pvalueCutoff=1)
+
+gsea_hallmark@result$Description <- gsub('HALLMARK_','',gsea_hallmark@result$Description)
+gsea_hallmark@result$Description <- gsub('_',' ',gsea_hallmark@result$Description)
+
+#Need LogFC in descending order along with the gene names
+dotplot(gsea_hallmark,
+        x = "NES",
+        showCategory = 50,
+        orderBy = "NES",
+        title = title_pathway,
+        #color = 'p.adjust', #Map 'padj' to color
+        font.size = 7) +
+  scale_color_gradient2(#limits = c(0, 0.05),
+    #breaks = c(0, 0.05),
+    #labels = c("0.0", "0.05"),
+    low = "orange",
+    mid = "red",
+    high = "green",
+    na.value = "blue") +
   ggtitle(paste(factor1, "vs", factor2)) +
   theme(plot.title = element_text(hjust = 0.5))
+  
+#NES is Normalized Enrichment Score
+  
+  
+####OLD CODE FOLLOWS
+#   
+# human_hall_file<-paste0(input_dir,"/GSEA/h.all.v2023.2.Hs.symbols.gmt")
+# hall <- read.gmt(human_hall_file)
+# 
+# resdatagenes_gsea <- resdatagenes_subset
+# resdatagenes_gsea <- resdatagenes_gsea[!is.na(resdatagenes_gsea$log2FoldChange),]
+# resdatagenes_gsea <- resdatagenes_gsea[order(-resdatagenes_gsea$log2FoldChange),]
+# resdatagenes_gsea$FC_pval <- (resdatagenes_gsea$log2FoldChange)
+# logFC.l2n <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$FC_pval
+# names(logFC.l2n) <- resdatagenes_gsea[order(-resdatagenes_gsea$FC_pval),]$GeneSymbol
+# 
+# gsea.hall.l2n <- GSEA(logFC.l2n, TERM2GENE=hall, verbose=FALSE, pvalueCutoff=1)
+# 
+# gsea.hall.l2n@result$Description <- gsub('HALLMARK_', '', gsea.hall.l2n@result$Description)
+# gsea.hall.l2n@result$Description <- gsub('_', ' ', gsea.hall.l2n@result$Description)
+# 
+# # #If Needed to save
+# # gsea.hall.l2n.df <- as.data.frame(gsea.hall.l2n@result)
+# # write.csv(gsea.hall.l2n.df, paste0(outsdir,"/","GSEA_output", factor1, "_vs_", factor2,".csv"),row.names = FALSE)
+# 
+# dotplot(gsea.hall.l2n, 
+#             x="NES", 
+#             showCategory=50, 
+#             orderBy= "NES",
+#             #title = "Cohort1 vs Cohort2",
+#             color="p.adjust",   # Map 'p.adjust' to color
+#             font.size = 7) +
+#   scale_color_gradient2(#limits = c(0, 0.05),
+#                         #breaks = c(0, 0.05),
+#                         #labels = c("0.0", "0.05"),
+#                         low = "orange",
+#                         mid = "red",
+#                         high = "green",
+#                         na.value = "blue") +
+#   ggtitle(paste(factor1, "vs", factor2)) +
+#   theme(plot.title = element_text(hjust = 0.5))
 
+#NES is Normalized Enrichment Score
 # saveFigure(figure=dp,fileName="HallmarkPathwayAnalysis")
+
+## Alternative Way of Pathway Analysis ----
+library(clusterProfiler)
+library(enrichplot)
+# Use the example data set included with the package DOSE
+data(geneList, package="DOSE")
+# Set fold change > 2 as being DE genes
+gene <- names(geneList)[abs(geneList)>2]
+gene.df <- bitr(gene, fromType = "ENTREZID",
+                toType = c("ENSEMBL", "SYMBOL"),
+                OrgDb = org.Hs.eg.db)
+head(gene.df)
+
+ggo <- groupGO(gene = gene,
+             OrgDb = org.Hs.eg.db,
+             ont = "CC",
+             level = 3,
+             readable = TRUE)
+
+head(ggo)
+
+gene.df
+
+ego <- enrichGO(gene = gene,
+                universe = names(geneList),
+                OrgDb = "org.Hs.eg.db", 
+                ont = "CC",
+                pAdjustMethod = "BH",
+                pvalueCutoff = 0.01,
+                qvalueCutoff = 0.05,
+                readable=TRUE)
+head(ego)
+
+median.FC.values <- runif(n = dim( ego@result)[1] , min=-15, max = 15)
+names(median.FC.values) <- rownames(ego@result)
+
+ego@result$medianFC <-  median.FC.values
+
+head(ego@result)
+head(as.data.frame(ego))
+
+options(enrichplot.colors = c("pink", "blue"))
+dotplot(ego, color="p.adjust") +
+  scale_colour_gradient2(low="green", mid="white", high="red",
+                         limits = c(-15, 15),
+                         breaks = c(-15, -7.5, 0, 7.5, 15),
+                         labels = c("-15down", "-7.5", "0", "7.5", "15up"),  
+                         guide=guide_colorbar(reverse=TRUE) )  +
+  labs(size="Count", colour="Median logFC")
+
+
+
+
+
+
+############################################
+## Venn Diagram & Upset Plot of Top 50 Genes----
+############################################
+
+# Combine datasets into a list
+T50Merged <- cbind(T50Control_128.10, T50Control_130, T50Control_128.13)
+
+# Extract sets from the data frame
+Control_128.10 <- T50Merged$Control_128.10
+Control_130 <- T50Merged$Control_130
+Control_128.13 <- T50Merged$Control_128.10
+
+listInput <- list(
+  Control_128.10 = T50Merged$Control_128.10,
+  Control_130 = T50Merged$Control_130,
+  Control_128.13 = T50Merged$Control_128.13
+)
+upsetData <- data.frame(listInput)
+
+### Venn Diagram===
+#install.packages("ggVennDiagram")
+library(ggVennDiagram)
+# Create the Venn diagram #DONT CREATE LIST
+# venn_data <- list(
+#   "Control vs 128.10" = Control_128.10,
+#   "Control vs 130" = Control_130,
+#   "Control vs 128.13" = Control_128.13
+# )
+
+## Plot using ggVennDiagram===
+#ggVennDiagram(venn_data, label_alpha = 0.5) +
+ggVennDiagram::ggVennDiagram(listInput, label_alpha = 0.5) +
+#ggVennDiagram::ggVennDiagram(upsetData, label_alpha = 0.5) + #Works too
+  scale_fill_gradient(low = "white", high = "blue") +
+  ggtitle("Venn Diagram of Top50 DEG Between Sets") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none"
+  )  # Change background color
+
+# Find intersections
+intersection_12 <- intersect(Control_128.10, Control_130)
+intersection_13 <- intersect(Control_128.10, Control_128.13)
+intersection_123 <- Reduce(intersect, list(Control_128.10, Control_130, Control_128.13))
+
+intersection_all <- Reduce(intersect, list(set1, set2, set3, set4))
+# Print intersections
+print(paste("Intersection of Set1 and Set2:", toString(intersection_12)))
+print(paste("Intersection of Set1, Set2, and Set3:", toString(intersection_123)))
+print(paste("Intersection of all sets:", toString(intersection_all)))
+
+intersection123 <- Reduce(intersect, listInput)
+print(paste("Intersection", toString(intersection123)))
+
+
+
+###Upset Plot===
+
+# Install and load the required packages
+# install.packages("UpSetR")
+library(UpSetR)
+#UpSetR::upset(as.data.frame(upsetData), 
+UpSetR::upset(fromList(listInput), 
+      nsets = 3,
+      #sets = c("Control_128.10", "Control_130", "Control_128.13"),
+      number.angles = 0,
+      mb.ratio = c(0.65, 0.35),
+      point.size = 5,
+      line.size = 1.3,
+      order.by = "freq",
+      #group.by = "freq",
+      mainbar.y.label = "Number of Common DEG",
+      sets.x.label = "Number of Top DEG",
+      main.bar.color = "#6666FF",
+      sets.bar.color = "#7DD305" , #flouroscent green
+      matrix.color = "#FF6699", #pink #FF7D58", #orange
+      matrix.dot.alpha = 0.1,
+      shade.color = "#999",
+      empty.intersections = "on",
+      text.scale = c(1.8, 2, 1.2, 1, 2, 2),
+      #text.scale = 1.5,
+      keep.order = TRUE)
+
+#Using ComplexHeatmap::Upset==
+m <- make_comb_mat(listInput)
+col_size = comb_size(m)
+# Draw the UpSet plot
+ComplexHeatmap::UpSet(m,
+      top_annotation = upset_top_annotation(m),
+      right_annotation = upset_right_annotation(m),
+      left_annotation = NULL,
+      row_names_side = "left",
+      column_title = "Plot")
+
+#Using ComplexUpset::upset==
+#install.packages("ComplexUpset")
+library(ComplexUpset)
+head(upsetData)
+upsetDataFrame <- UpSetR::upset(fromList(listInput))
+ComplexUpsetData <- upsetDataFrame$New_data
+intersections <- colnames(upsetDataFrame$New_data)[1:3]
+# genres <- colnames(upsetData)
+ComplexUpset::upset(data = ComplexUpsetData, 
+                    intersect = intersections, 
+                    name='Intersecting Groups', 
+                    width_ratio = 0.1,
+                    guides = 'over') +
+  ggtitle("Intersection of DEGs Between Groups")
+
+# intersection_subset = c("Control_128.10", "Control_130", "Control_128.13")
+# arrangedVenn =  arrange_venn(ComplexUpsetData, sets=intersection_subset)
