@@ -65,9 +65,8 @@ savePNG <- function(figure, fileName, w = 900, h = 1300) {
 #Initiate project
 setupProject("RNASeqAnalysis")
 getwd()
-# Project specific override: output folder V0.4 UnTrimmedNewIndexHierarchicalCategory
-output_dir <- "/Users/i/Dropbox/Clinic3.0/Developer/RStudio/RNASeqAnalysis/output/1.0_HierarchicalCategoryWithPathwayAnalysis"
-
+# Project specific override: output folder 1.1_HierarchicalCategory_Top100DEGs
+output_dir <- paste0(output_dir, "/1.1_HierarchicalCategory_Top100DEGs")
 #### Install & Load Packages ----
 list.of.packages.cran <- c("annotate", "circlize", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
 new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
@@ -80,13 +79,11 @@ BiocManager::install(new.packages.bioc, update = FALSE)
 # Load packages
 sapply(c(list.of.packages.cran, list.of.packages.bioc), require, character.only=TRUE)
 
-#rm(list=ls()) #remove all existing lists; DONT
-
 #### Source & Process Input files ----
 colData_file<-paste0(input_dir,"/samplesheet.csv")
 fc_file<-paste0(input_dir,"/featureCounts_0")
 
-##Process input files
+### Process input files
 colData<-read.csv(file = colData_file, 
                   header=TRUE, 
                   stringsAsFactors = FALSE, 
@@ -148,7 +145,7 @@ ddsObject <- DESeqDataSetFromMatrix(countData = countData,
                                     design = ~ cellLine + drug)
 
 #Keeping rows that have at least 10 reads for a minimum number of samples
-#Minimal number of samples is to specify the smallest group size, eg here 12 of each cellLine
+#Minimal number of samples is the smallest group size, eg here 12 of each cellLine
 # So 12 would be a good minimal number of samples.
 # So row sum of minimal number of samples should have more than 10 reads at least
 smallestGroupSize <- 12
