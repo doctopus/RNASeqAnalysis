@@ -60,7 +60,20 @@ savePNG <- function(figure, fileName, w = 900, h = 1300) {
   print(figure)
   dev.off()
 }
-
+install_and_load_packages <- function(cran_packages, bioc_packages) {
+  # Install missing CRAN packages
+  new_packages_cran <- cran_packages[!(cran_packages %in% installed.packages()[, "Package"])]
+  if (length(new_packages_cran) > 0) {install.packages(new_packages_cran)}
+  # Install missing Bioconductor packages
+  new_packages_bioc <- bioc_packages[!(bioc_packages %in% installed.packages()[, "Package"])]
+  if (length(new_packages_bioc) > 0) {
+    if (!requireNamespace("BiocManager", quietly = TRUE)) {install.packages("BiocManager")}
+    BiocManager::install(new_packages_bioc, update = FALSE)
+  }
+  # Load all packages
+  all_packages <- c(cran_packages, bioc_packages)
+  sapply(all_packages, require, character.only = TRUE)
+}
 #### Analysis Specific Code ----
 #Initiate project
 setupProject("RNASeqAnalysis")
@@ -68,16 +81,9 @@ getwd()
 # Project specific override: output folder 1.1_HierarchicalCategory_Top100DEGs
 output_dir <- paste0(output_dir, "/1.1_HierarchicalCategory_Top100DEGs")
 #### Install & Load Packages ----
-list.of.packages.cran <- c("annotate", "circlize", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
-new.packages.cran <- list.of.packages.cran[!(list.of.packages.cran %in% installed.packages()[,"Package"])]
-if(length(new.packages.cran)>0) install.packages(new.packages.cran)
-# Install not-yet-installed Bioconductor packages
-list.of.packages.bioc <- c("apeglm", "clusterProfiler", "ComplexHeatmap", "DESeq2", "DOSE", "genefilter", "GSVA", "org.Hs.eg.db", "xCell")
-new.packages.bioc <- list.of.packages.bioc[!(list.of.packages.bioc %in% installed.packages()[,"Package"])]
-if(length(new.packages.bioc)>0)if (!requireNamespace("BiocManager")) install.packages("BiocManager")
-BiocManager::install(new.packages.bioc, update = FALSE)
-# Load packages
-sapply(c(list.of.packages.cran, list.of.packages.bioc), require, character.only=TRUE)
+cran_packages <- c("annotate", "circlize", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
+bioc_packages <- c("apeglm", "clusterProfiler", "ComplexHeatmap", "DESeq2", "DOSE", "genefilter", "GSVA", "org.Hs.eg.db", "xCell")
+install_and_load_packages(cran_packages, bioc_packages)
 
 #### Source & Process Input files ----
 colData_file<-paste0(input_dir,"/samplesheet.csv")
@@ -523,7 +529,6 @@ resdata_subset <- resdata_subset %>%
 
 #Get Bioconductor Annotation Database
 sp <- org.Hs.eg.db
-
 
 resdata_subset$GeneSymbol<- mapIds(sp, keys=resdata_subset$EnsembleID, column=c("SYMBOL"), keytype="ENSEMBL", multiVals="first")
 resdata_subset$EntrezID<- mapIds(sp, keys=resdata_subset$EnsembleID, column=c("ENTREZID"), keytype="ENSEMBL", multiVals="first")
