@@ -128,6 +128,7 @@ fc2 <- fc1[, desired_order]
 head(fc2)
 
 ##### Make DDSObject (Define if Doing Subset Analysis) ----
+### ############################### ###
 #subsetToAnalyze <- NULL #If not performing subset analysis
 subsetToAnalyze <- "358" # Define cellLine Subset to analyze 
 ### ############################### ###
@@ -192,20 +193,51 @@ head(res)
 # The result function will by default pull the last variable in design (drug)
 #...unless "name" or "contrast" argument is provided as follows.
 
-#To define contrast pairs in the results argument as follows
+#To find how many differentially expressed genes based on a p-value cutoff
+table(res$padj < 0.05)
+
+#To see the normalized counts from the dds object
+normCounts <- counts(dds, normalized = TRUE)
+
+##To define contrast pairs in the results argument as follows
 resControlx128.10 <- results(dds, contrast = c("drug", "128-10", "Control"))
 head(resControlx128.10)
 
-#Alternatively pick a cobination from 
+#Alternatively pick a combination from 
 resultsNames(dds)
-
 resControlx128.13 <- results(dds, name="drug_128.13_vs_Control")
 head(resControlx128.13)
 
-# Visualize the result to detect distribution anomaly
-plotMA(res, ylim = c(-3, 3))
+
+##Plot DESeq2 dispersion re-estimation procedure
+plotDispEsts(dds)
+
+# Visualize the distribution of p-values
 hist(res$pvalue, breaks=20, col="grey")
+hist(res$pvalue, breaks=0:50/50, xlab="p value", col="grey", 
+     main="Histogram of nominal p values")
 hist(res$padj, breaks=20, col="grey")
+
+# Two common visualization for DE analysis are MA-plot and Volcano Plot
+# MA-plot: Visualize relationship between a genes’ mean expression..
+#..and its fold-change between experimental conditions
+plotMA(res, ylim = c(-3, 3))
+plotMA(res)
+#plotMA(resOrdered)
+
+#Volcano-plot: DESeq2 does not provide a function, but use base R
+#..Here red are highlighted to show genes that are DE with Padj<0.05
+plot(res$log2FoldChange, -log10(res$pvalue), 
+     xlab="log2 Fold-change",
+     ylab="-log P-value",
+     pch=20,
+     cex=0.5)
+points(res$log2FoldChange[res$padj<0.05], -log10(res$pvalue[res$padj<0.05]),
+       col="red", pch=20, cex=0.5)
+abline(v=0, h=-log10(0.05), lty="dashed", col="grey")
+
+
+
 
 # Since we want rank and visualization, shrink data by either apeglm, ashr or "normal" algorithm
 # We provide the name or number of the coefficient we want to shrink,
@@ -218,12 +250,6 @@ resultsNames(dds)
 resLFCapeglm <- lfcShrink(dds, coef = "drug_130_vs_Control", type = "apeglm")
 resLFCnormal <- lfcShrink(dds, coef = "drug_130_vs_Control", type = "normal")
 
-#Plot dispersion estimate
-plotDispEsts(dds)
-
-#MA Plot
-plotMA(res)
-#plotMA(resOrdered)
 
 #It is more useful to visualize the shrunken log2 fold changes
 #..which remove the noise associated with log2 fold changes from low 
@@ -455,7 +481,7 @@ hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row",
               main=paste("Top 100 Fold Change:", subsetToAnalyze, "cell Line \n", "[", title, "]"))
 # saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128-13",h=12,w=12)
 
-##Save Data for Venn Diagram Analysis----
+##Save Gene Data for Venn Diagram Analysis----
 #TODO Modify data of saving flow
 #=Alternate Flow Start----------
 # Creating the data frame name and column name by concatenating factor1 and factor2
@@ -524,7 +550,7 @@ row_names <- rownames(Top100_f1vsf2_ordered)
 T50Control_130 <- data.frame(Control_130 = row_names)
 # head(T50Control_130)
 
-#=SKIP Complex Heatmap Code----
+#=SKIP-START Complex Heatmap Code----
 ## Complex Heat Map Code--
 # library(ComplexHeatmap)
 # library(circlize)
@@ -600,7 +626,7 @@ legends <- packLegend(legend_drug, legend_cellLine)
 # Draw the heatmap with custom legends
 draw(hm25, heatmap_legend_side = "right", annotation_legend_side = "right", annotation_legend_list = legends)
 
-#=SKIP-END ComplexHeatmap Code Ends----
+#=SKIP-ENDS ComplexHeatmap Code Ends----
 ##### Variable Genes ----
 #A copy of resdata which is already based on a comparison pair
 resdataf1vsf2 <- resdata
@@ -615,7 +641,7 @@ topVarGenes <- head(order(-genefilter::rowVars(resdataf1vsf2)),100)
 mat <- resdataf1vsf2[topVarGenes, ]
 mat <- mat - rowMeans(mat)
 
-#SKIP-START If !(Show Only Once Cell Line) Now pipeline is branched based on cell line----
+#=SKIP-START If !(Show Only Once Cell Line) Now pipeline is branched based on cell line----
 cellLineToPlot <- "358"
 # Find columns with "318" in their names
 DsKeepCols <- grep(cellLineToPlot, names(resdataf1vsf2), value = TRUE)
@@ -624,8 +650,8 @@ resdataf1vsf2 <- resdataf1vsf2[, DsKeepCols]
 topVarGenes <- head(order(-genefilter::rowVars(resdataf1vsf2)),100)
 mat <- resdataf1vsf2[topVarGenes, ]
 mat <- mat - rowMeans(mat)
-#SKIP-ENDS-----
-###Plot Variable Genes----
+#=SKIP-ENDS-----
+### Plot Variable Genes----
 #plot the variable genes in heatmap
 hmVariable<-pheatmap::pheatmap(mat,
                       annotation_col=colData,
@@ -695,7 +721,7 @@ dotplot(gsea_hallmark,
   theme(plot.title = element_text(hjust = 0.5))
 #NES is Normalized Enrichment Score
 
-###Save Data for Venn Diagram
+## Save Pathway Data for Venn Diagram ----
 pathways <- gsea_hallmark@result$Description 
 #pathways <- rownames(Top50_f1vsf2_ordered)
 
