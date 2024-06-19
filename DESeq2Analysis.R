@@ -127,7 +127,7 @@ fc1 <- fc %>%
 fc2 <- fc1[, desired_order]
 head(fc2)
 
-##### Make DDSObject (Define if Doing Subset Analysis) ----
+##### Make DDSObject (INPUT NEEDED- Define if Doing Subset Analysis) ----
 ### ############################### ###
 #subsetToAnalyze <- NULL #If not performing subset analysis
 subsetToAnalyze <- "358" # Define cellLine Subset to analyze 
@@ -370,7 +370,7 @@ print(pcaRLD500)
 #colData(dds)
 
 
-### DEG Prepare Data for Plot ----
+### DEG Prepare Data for Plot (INPUT NEEDED- Define Comparison Groups)----
 ComparisonColumn <- "drug"
 factor1 <- "130"
 factor2 <- "Control"
@@ -679,8 +679,8 @@ volcanoPlot<-EnhancedVolcano(resdata,
               drawConnectors = TRUE)
 print(volcanoPlot)
 
-##### Pathway Analysis With Hallmark Geneset ----
-######################################## --
+##### HALLMARK: Pathway Analysis With Hallmark Geneset ----
+########## Input: List of descending log2FoldChange with names as Genes
 human_hall_file<-paste0(input_dir,"/GSEA/h.all.v2023.2.Hs.symbols.gmt")
 # human_hall_file<-paste0(input_dir,"/GSEA/h.all.v7.2.symbols.gmt")
 genesets <- read.gmt(human_hall_file)
@@ -721,7 +721,7 @@ dotplot(gsea_hallmark,
   theme(plot.title = element_text(hjust = 0.5))
 #NES is Normalized Enrichment Score
 
-## Save Pathway Data for Venn Diagram ----
+## Save Pathway Data for Venn Diagram ---
 pathways <- gsea_hallmark@result$Description 
 #pathways <- rownames(Top50_f1vsf2_ordered)
 
@@ -730,9 +730,8 @@ pathways <- gsea_hallmark@result$Description
 Path23Control_130 <- data.frame(Control_130 = pathways)
 
 
-#####=Pathway Analysis with GO Params (https://rpubs.com/pranali018/enrichmentAnalysis)----
-### ...Which is derived from (https://learn.gencore.bio.nyu.edu/rna-seq-analysis/deseq-2/)
-
+##### GO: Pathway Analysis with GO Params (https://learn.gencore.bio.nyu.edu/rna-seq-analysis/deseq-2/)----
+########## Input: List of descending log2FoldChange with names as Genes
 # library(clusterProfiler)
 # library(enrichplot)
 # library("org.Hs.eg.db")
@@ -748,19 +747,25 @@ original_gene_list <- ordered_data$log2FoldChange #Take the log2FC column only
 #Name the vector
 names(original_gene_list) <- ordered_data$Gene #Assign Row names as their corresponding Gene
 
-#Omit any NA values
-gene_list = na.omit(original_gene_list)
+
+gene_list = na.omit(original_gene_list) #Omit any NA values (Previously Done)
 head(gene_list)
 
-#Sort in decreasing order of log2FoldChange
-gene_list = sort(gene_list, decreasing = TRUE)
+gene_list = sort(gene_list, decreasing = TRUE) #Sort in decreasing order of log2FoldChange (Already Done)
+head(gene_list)
 
-#GO comprises three orthogonal ontologies
+##GO comprises three orthogonal ontologies
 #MF: Molecular Function, 
 #BP: Biological Process,
 #CC: Cellular Component
+
+onto = "CC"
+dictionary <- c(ALL = "ALL", CC="Cellular Component", BP="Biological Process", MF="Molecular Function")
+
+# dictionary[[onto]]
+
 gse <- gseGO(geneList = gene_list,
-         ont = "ALL", # Determines number of ontology terms per feature (BP, MF, CC, ALL) to be displayed
+         ont = onto, # Determines number of ontology terms per feature (BP, MF, CC, ALL) to be displayed
          keyType = "SYMBOL", #Source of annotation, check options available by keytypes(org.Hs.eg.db)
          nPerm = 10000, #Higher number of permutations will get better result at the cost of longer analysis
          minGSSize = 3,
@@ -771,29 +776,64 @@ gse <- gseGO(geneList = gene_list,
          pAdjustMethod = "none")
 
 # library(DOSE)
-options(enrichplot.colours = c("#e5383b","#007DEF"))
-dotplot(gse, showCategory=10, split=".sign") +
+options(enrichplot.colours = c("#e5383b","#007DEF")) #Set colors of Dotplot
+#### Dot Plot
+dotplot(gse, 
+        font.size = 15,
+        label_format = 35,# Width of the labels
+        title=paste("GO Gene Set Enrichment Analysis:", subsetToAnalyze, "Cell Line -",
+                    dictionary[[onto]], "-", "[", title, "]"),
+        showCategory=5, 
+        split=".sign") +
   facet_grid(.~.sign)+
-  ggtitle(paste("Go Enrichment Analysis:", subsetToAnalyze, "cell Line \n", "[", title, "]"))
+  theme(plot.title = element_text(size=15, face = "bold"))#+
+  #ggtitle(paste("Go Enrichment Analysis:", subsetToAnalyze, "Cell Line -",
+                # dictionary[[onto]], "-", "[", title, "]"))
 
-#### Enrichment Map (Similarity Matrix)
+#### Enrichment Map Plot (Similarity Matrix)
 # Enrichment map organizes enriched terms into a network with edges connecting overlapping gene sets. 
 # ..In this way, mutually overlapping gene sets tend to cluster together, making it easy to identify functional modules.
-
-
 x2 = pairwise_termsim(gse)
-emapplot(x2, showCategory = 20)
+
+emapplot(x2, 
+         shadowtext= TRUE, 
+         font.size = 15,
+         showCategory = 20) +
+  ggtitle(paste("GO Enrichment Map of GSE Analysis:", subsetToAnalyze, "Cell Line -",
+                dictionary[[onto]], "-", "[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold"))
+
 
 #### Category Net Plot 
 # categorySize can be either 'pvalue' or 'geneNum'
-cnetplot(gse, categorySize="pvalue", foldChange=gene_list, showCategory = 3)
+cnetplot(gse, 
+         categorySize="pvalue", 
+         foldChange=gene_list, 
+         showCategory = 3)+
+  ggtitle(paste("GO Enrichment Gene-Concept Network:", subsetToAnalyze, "Cell Line -",
+                dictionary[[onto]], "-", "[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Plot linkages of genes and enriched concepts in GO categories")
 
 #### Ridge Plot
-#Grouped by gene set, density plots are generated by using the frequency of fold change values per gene within each set. Helpful to interpret up/down-regulated pathways.
+#Grouped by gene set, density plots are generated by using the frequency of fold change values per gene within each set. 
+#Helpful to interpret up/down-regulated pathways.
 
-ridgeplot(gse) + ggplot2::labs(x = "enrichment distribution")
+ridgeplot(gse,
+          label_format = 35, # Width of the labels)
+          showCategory = 10) +
+  ggplot2::labs(x = "Enrichment Distribution")+
+  ggtitle(paste("GO Enrichment Distribution:", subsetToAnalyze, "Cell Line -",
+                dictionary[[onto]], "-", "[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Ridgeline plot for GSEA result of Top 10 Categories")
 
-#### GSEA Plot ---
+
+#### GSEA Plot (Per Selected Pathway)---
+#GSEA PLOT Use the `Gene Set` param for the index in the title, and as the value for geneSetId
+
 #Running Enrichment Score Plot
 #Plot of the Running Enrichment Score (green line) for a gene set as the analysis walks down the ranked gene list,
 #..including the location of the maximum enrichment score (the red line). 
@@ -804,7 +844,20 @@ ridgeplot(gse) + ggplot2::labs(x = "enrichment distribution")
 gseaplot(gse, by = "all", title = gse$Description[1], geneSetID = 1)
 
 keytypes(org.Hs.eg.db)
-##### KEGG Gene Set Enrichment Analysis----
+
+#View Table: Can view pathway enrichment results by extracting result matrix from the kk2 object
+#The enriched pathways are stored in the ID and Description columns.
+go_result = as.matrix(gse@result) 
+head(go_result)
+go_result = go_result[, 1:10]
+head(go_result)
+
+
+#### Pathview (Per Selected Pathway)---
+# Not for GO Data Set
+ 
+##### KEGG: Pathway Analysis with KEGG Gene Set Enrichment Analysis----
+########## Input: List of descending log2FoldChange with names as EntrezID
 #Convert gene IDs for gseKEGG function
 #Not all gene ID will be converted
 ids = bitr(names(original_gene_list), fromType = "SYMBOL", toType="ENTREZID",
@@ -832,32 +885,88 @@ kegg_gene_list = na.omit(kegg_gene_list)
 #Sort in decreasing order (required for clusterProfiler)
 kegg_gene_list = sort(kegg_gene_list, decreasing = TRUE)
 head(kegg_gene_list)
+
+
 kegg_organism = "hsa"
 kk2 = gseKEGG(geneList = kegg_gene_list,
               organism = kegg_organism, #For Humans
+              nPerm = 10000, #Higher number of permutations for more accuracy at the cost of length of analysis
               minGSSize = 3,
               maxGSSize = 800,
               pvalueCutoff = 0.05,
               pAdjustMethod = "none",
-              keyType = "ncbi-geneid")
+              keyType = "ncbi-geneid") 
+
+#### Dot Plot
+dotplot(kk2, showCategory = 5, 
+        label_format = 35, # Width of the labels)
+        font.size = 15,
+        title=paste("KEGG Gene Set Enrichment Analysis:", subsetToAnalyze, "Cell Line -", "[", title, "]"),
+        split=".sign") +
+  facet_grid(.~.sign) +
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Gene Set Enrichment Analysis of KEGG")
+
+#### Enrichment Map Plot (Similarity Matrix)
+# Enrichment map organizes enriched terms into a network with edges connecting overlapping gene sets. 
+# ..In this way, mutually overlapping gene sets tend to cluster together, making it easy to identify functional modules.
+k2 = pairwise_termsim(kk2)
+emapplot(k2, 
+         shadowtext= TRUE,
+         font.size = 15,
+         showCategory = 20)+
+  ggtitle(paste("KEGG Enrichment Map of GSE Analysis:", subsetToAnalyze, "Cell Line -", "[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold"))
 
 
-dotplot(kk2, showCategory = 5, title = "KEGG Enriched Pathways", split=".sign") +
-  facet_grid(.~.sign)
+#### Category Net Plot 
+# categorySize can be either 'pvalue' or 'geneNum'
+cnetplot(kk2, 
+         categorySize="pvalue", 
+         foldChange=gene_list, 
+         showCategory = 3)+
+  ggtitle(paste("KEGG Enrichment Gene-Concept Network:", subsetToAnalyze, "Cell Line -","[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Plot linkages of genes and enriched concepts in KEGG categories")
 
-#Can view pathway enrichment results by extracting result matrix from the kk2 object
+
+#### Ridge Plot
+#Grouped by gene set, density plots are generated by using the frequency of fold change values per gene within each set. 
+#Helpful to interpret up/down-regulated pathways.
+
+ridgeplot(kk2,
+          label_format = 35, # Width of the labels
+          showCategory = 10) +
+  ggplot2::labs(x = "Enrichment Distribution")+
+  ggtitle(paste("KEGG Enrichment Distribution:", subsetToAnalyze, "Cell Line -", "[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Ridgeline plot for GSEA result of Top 10 Categories")
+
+
+#### GSEA Plot (Per Selected Pathway)---
+#GSEA PLOT Use the `Gene Set` param for the index in the title, and as the value for geneSetId
+
+#Running Enrichment Score Plot
+#Plot of the Running Enrichment Score (green line) for a gene set as the analysis walks down the ranked gene list,
+#..including the location of the maximum enrichment score (the red line). 
+#..The black lines in the Running Enrichment Score show where the members of the gene set appear in the ranked list of genes, indicating the leading edge subset.
+#..The Ranked list metric shows the value of the ranking metric (log2 fold change) as you move down the list of ranked genes. 
+#..The ranking metric measures a gene’s correlation with a phenotype.
+
+gseaplot(kk2, by = "all", title = kk2$Description[1], geneSetID = 1)
+
+#View Table: Can view pathway enrichment results by extracting result matrix from the kk2 object
 #The enriched pathways are stored in the ID and Description columns.
 kegg_result = as.matrix(kk2@result) 
 head(kegg_result)
 kegg_result = kegg_result[, 1:10]
 head(kegg_result)
 
-#Kegg Gene Set Plot
-# Use the `Gene Set` param for the index in the title, and as the value for geneSetId
-gseaplot(kk2, by = "all", title = kk2$Description[1], geneSetID = 1)
 
-
-###Pathview ---
+#### Pathview (Per Selected Pathway)---
 #This will create a PNG and different PDF of the enriched KEGG pathway and xml files.
 #gene.data: This is kegg_gene_list created above
 #pathway.id: The user needs to enter this. Enriched pathways + the pathway ID are provided in the gseKEGG output table (above).
@@ -865,61 +974,130 @@ gseaplot(kk2, by = "all", title = kk2$Description[1], geneSetID = 1)
 
 # BiocManager::install("pathview")
 # library(pathview)
+#Get pathway.id from kk2$ID
+
 r1 =pathview(gene.data = kegg_gene_list, pathway.id = "hsa04721", #Ids from gseKEGG output (kk2)
   species = kegg_organism)
 # ↑ This saves the png, preview.png and an xlm file in the project dir
 
+#==== REACTOME: Gene Set Enrichment Analysis of Reactome Pathway (NOT WORKING)----
+# (https://yulab-smu.top/biomedical-knowledge-mining-book/reactomepa.html)
+BiocManager::install("ReactomePA")
+BiocManager::install("reactome.db")
+library("reactome.db")
+library("ReactomePA")
+data("geneList")
+head(geneList)
+head(kegg_gene_list)
+dim(kegg_gene_list)
+de <- names(kegg_gene_list)[abs(kegg_gene_list) > 1.2] #Pick the highly foldchanged ones
+length(de)
+head(de)
 
 
 
+x <- enrichPathway(gene=de, pvalueCutoff=0.05, readable=T)
+y <- gsePathway(geneList = kegg_gene_list,
+                minGSSize=120,
+                pvalueCutoff=0.05,
+                pAdjustMethod="BH",
+                verbose=TRUE)
+
+enrichmap(y)
 
 
-#= Experimenting..Go Analysis============
-# Use the example data set included with the package DOSE
-data(geneList, package="DOSE")
-head(geneList, 10)
-# Set fold change > 2 as being DE genes
-gene <- names(geneList)[abs(geneList)>2]
+# Error: ReactomePA depends on reactome.db, which is not installing
+# Trying ReactomeGSA package
+BiocManager::install("ReactomeGSA")
+library(ReactomeGSA)
+reactome_result <- analyse_sc_clusters(kegg_gene_list, verbose = TRUE)
+
+##=== GO Enrichment Analysis --Experimenting============
+# (https://yulab-smu.top/biomedical-knowledge-mining-book/clusterprofiler-go.html)-
+# Enrichment Analysis done for a set of genes (Here selecting the top log2FoldChange genes)
+#Input: List of Genes with name as EntrezIDs
+
+# Example: Use the example data set included with the package DOSE
+# data(geneList, package="DOSE")
+# head(geneList, 10)
+
+#SKIP START--
+# Set fold change > 1.2 as being DE genes Select a few genes (Directly get the set with Gene names)
+gene <- names(kegg_gene_list)[abs(kegg_gene_list)>1.2]
+length(gene) #10 Genes Selected
+
+#Gene Name needed so can use the gene_list from GO analysis and skip next step
 gene.df <- bitr(gene, fromType = "ENTREZID",
                 toType = c("ENSEMBL", "SYMBOL"),
                 OrgDb = org.Hs.eg.db)
 head(gene.df)
 
-ggo <- groupGO(gene = gene,
-             OrgDb = org.Hs.eg.db,
-             ont = "CC",
-             level = 3,
-             readable = TRUE)
+#gene_list is list with Gene Names
+head(gene_list) #list with Gene Names
+head(kegg_gene_list) #list with EntrezID and o
+names(kegg_gene_list)
 
-head(ggo)
+# SKIP ENDS --
 
+#GO comprises three orthogonal ontologies
+#MF: Molecular Function, 
+#BP: Biological Process,
+#CC: Cellular Component
+
+# ggo <- groupGO(gene = names(kegg_gene_list),
+#              OrgDb = org.Hs.eg.db,
+#              ont = "BP",
+#              level = 3,
+#              readable = TRUE)
+# 
+# head(ggo)
+# goplot(ggo)
+
+#Select a few genes of interest (Here with high log2FoldChange)
+gene <- names(kegg_gene_list)[abs(kegg_gene_list)>1]
+length(gene) #10 Genes Selected
 
 ego <- enrichGO(gene = gene,
-                universe = names(geneList),
+                universe = names(kegg_gene_list), #
                 OrgDb = "org.Hs.eg.db", 
-                ont = "CC",
+                ont = "BP", #Only Works for BP; Not for ALL/MP/CC
                 pAdjustMethod = "BH",
                 pvalueCutoff = 0.01,
                 qvalueCutoff = 0.05,
                 readable=TRUE)
+
 head(ego)
 
-median.FC.values <- runif(n = dim( ego@result)[1] , min=-15, max = 15)
-names(median.FC.values) <- rownames(ego@result)
+#Induced GO DAG(Directed Acyclic Graph) of Significant Terms
+goplot(ego,
+       showCategory =50,#No effect
+       color = "p.adjust", #No effect
+       layout = "sugiyama", #No effect
+       geom = "text")+ #No effect
+  ggtitle(paste("GO Induced DAG Plot of Significant Terms:", subsetToAnalyze, "Cell Line -",
+                dictionary["BP"], "-", "[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Induced GO DAG (Directed Acyclic Graph) of Significant Terms")
 
-ego@result$medianFC <-  median.FC.values
 
-head(ego@result)
-head(as.data.frame(ego))
 
-options(enrichplot.colors = c("pink", "blue"))
-dotplot(ego, color="p.adjust") +
-  scale_colour_gradient2(low="green", mid="white", high="red",
-                         limits = c(-15, 15),
-                         breaks = c(-15, -7.5, 0, 7.5, 15),
-                         labels = c("-15down", "-7.5", "0", "7.5", "15up"),  
-                         guide=guide_colorbar(reverse=TRUE) )  +
-  labs(size="Count", colour="Median logFC")
+# median.FC.values <- runif(n = dim( ego@result)[1] , min=-15, max = 15)
+# names(median.FC.values) <- rownames(ego@result)
+# 
+# ego@result$medianFC <-  median.FC.values
+# 
+# head(ego@result)
+# head(as.data.frame(ego))
+# 
+# options(enrichplot.colors = c("pink", "blue"))
+# dotplot(ego, color="p.adjust") +
+#   scale_colour_gradient2(low="green", mid="white", high="red",
+#                          limits = c(-15, 15),
+#                          breaks = c(-15, -7.5, 0, 7.5, 15),
+#                          labels = c("-15down", "-7.5", "0", "7.5", "15up"),  
+#                          guide=guide_colorbar(reverse=TRUE) )  +
+#   labs(size="Count", colour="Median logFC")
 
 ############################################ --
 ##### Venn Diagram & Upset Plot ----
