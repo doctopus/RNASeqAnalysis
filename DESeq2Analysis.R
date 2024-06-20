@@ -97,21 +97,22 @@ bioc_packages <- c("apeglm", "clusterProfiler", "ComplexHeatmap", "DESeq2", "DOS
 install_and_load_packages(cran_packages, bioc_packages)
 
 ##### Source & Process Input files ----
-colData_file<-paste0(input_dir,"/samplesheet.csv")
-fc_file<-paste0(input_dir,"/featureCounts_0")
+file_samplesheet<-paste0(input_dir,"/samplesheet.csv")
+file_fc<-paste0(input_dir,"/featureCounts_0")
 ## Process input files
-colData<-read.csv(file = colData_file, 
+sampleData<-read.csv(file = file_samplesheet, 
                   header=TRUE, 
                   stringsAsFactors = FALSE, 
                   check.names = FALSE,
                   row.names = "sample")
-colData <- colData[,c("cellLine", "drug")]
-colData[, c("cellLine", "drug")] <- lapply(colData[, c("cellLine", "drug")], factor)
-head(colData)
+sampleData <- sampleData[,c("cellLine", "drug")]
+sampleData <- sampleData %>% mutate(drug = gsub("-", ".", drug))
+sampleData[, c("cellLine", "drug")] <- lapply(sampleData[, c("cellLine", "drug")], factor)
+head(sampleData)
 
-fc <- read.delim(fc_file, row.names = NULL, check.names = FALSE)
+fc <- read.delim(file_fc, row.names = NULL, check.names = FALSE)
 genes_to_keep <- rowSums(fc[, 8:ncol(fc)]) > 1        #Keep Genes which are expressed in >1 sample
-desired_order <- rownames(colData)                    #Order of columns per colData
+desired_order <- rownames(sampleData)                    #Order of columns per sampleData
 
 fc1 <- fc %>%
   filter(genes_to_keep) %>%                           # Keep genes with expression in >1 sample
@@ -130,16 +131,17 @@ head(fc2)
 ##### Make DDSObject (INPUT NEEDED- Define if Doing Subset Analysis) ----
 ### ############################### ###
 #subsetToAnalyze <- NULL #If not performing subset analysis
-subsetToAnalyze <- "358" # Define cellLine Subset to analyze 
+subsetToAnalyze <- "318" # Define 318 or 358 cellLine Subset to analyze 
 ### ############################### ###
 perform_subset_analysis <- !is.null(subsetToAnalyze) && subsetToAnalyze != ""
 # Perform conditional branching
 if (perform_subset_analysis) {
   countData <- fc2 %>% dplyr::select(contains(subsetToAnalyze))
-  colData <- colData %>% filter(cellLine == subsetToAnalyze)
+  colData <- sampleData %>% filter(cellLine == subsetToAnalyze)
   design_formula <- ~ drug
 } else {
   countData <- fc2
+  colData <- sampleData
   design_formula <- ~ cellLine + drug
 }
 # Check validity of data format
@@ -170,7 +172,8 @@ ddsObject_filtered <- ddsObject[keep,]
 ddsObject_filtered$drug
 
 #Since we are primarily comparing between different drugs, so our primary level
-#of comparison is drugs, and here reference level is Control
+#of comparison is drugs, and here reference level is Control 
+#(this only reorders, since the default comparison is with first in the list)
 ddsObject_filtered$drug <- relevel(ddsObject_filtered$drug, ref="Control")
 
 ddsObject_filtered$drug <- droplevels(ddsObject_filtered$drug) #remove the levels (of drug) 
@@ -200,7 +203,7 @@ table(res$padj < 0.05)
 normCounts <- counts(dds, normalized = TRUE)
 
 ##To define contrast pairs in the results argument as follows
-resControlx128.10 <- results(dds, contrast = c("drug", "128-10", "Control"))
+resControlx128.10 <- results(dds, contrast = c("drug", "128.10", "Control"))
 head(resControlx128.10)
 
 #Alternatively pick a combination from 
@@ -293,14 +296,14 @@ ggplot(plotCount, aes(x=drug, y=count, color =drug))+
 
 ##### DDS Apply Transformation ----
 # Apply transformation & estimate dispersion trend
-#vsd <- vst(dds, blind = FALSE) # VST: Variance Stabilizing Transformation
-rld <- rlog(dds, blind=FALSE) # RLT: Regularized Log Transformation
+vsd <- vst(dds, blind = FALSE) # VST: Variance Stabilizing Transformation
+rld <- rlog(dds, blind=FALSE) # RLT: Regularized Log Transformation (Selected for this analysis)
 head(assay(vsd), 2)
 head(assay(rld), 2)
 
 ### Heatmaps ----
 #my_colors <- colorRampPalette(c("blue", "white", "red"))(99)
-my_colors <- colorRampPalette(c("white", "#A71415"))(99)
+my_colors <- colorRampPalette(c("white", "#E32600"))(99)
 
 # Extract Transformed values
 #rld<-vst(dds) #estimate dispersion trend and apply a variance stabilizing transformationrld<-vst(dds)
@@ -312,6 +315,7 @@ sampleDists_subset <- as.matrix(dist(t(assay(rld))))
 hm<-pheatmap::pheatmap(as.matrix(sampleDists_subset),
                        annotation_col = colData, 
                        col=my_colors,
+                       main = paste("Distance Matrix", subsetToAnalyze, "Cell Line"),
                        annotation_legend=TRUE)
 
 #Plot Heatmap of Hierarchical Clustering
@@ -319,21 +323,25 @@ rld_mat <- assay(rld) #Extract the transformed matrix from the object
 rld_cor <- cor(rld_mat) #Compute pairwise correlation values
 head(rld_cor)
 heat.colors <- RColorBrewer::brewer.pal(6, "BrBG")
-pheatmap(rld_cor, annotation=colData, color = heat.colors, border_color = NA,
+pheatmap(rld_cor, 
+         annotation=colData, 
+         color = heat.colors, border_color = NA,
+         main = paste("Hierarchical Correlation", subsetToAnalyze, "Cell Line"),
          fontsize = 10, fontsize_row = 10, height = 20)
 
 
 ### PCA Plots ----
+
 ## PCA Plot using VSD Transformation 
 # Argument in plotPCA ntop=length(vsd)) to include all genes; 
 #...default is ntop=500, to plot top 500 feature variance
 plotPCAvst <- plotPCA(vsd, intgroup = "drug", returnData=FALSE, ntop=length(vsd)) 
 plotPCAvstData <- plotPCA(vsd, intgroup="drug", returnData=TRUE, ntop=length(vsd))
 pcaVST <- plotPCAvst+geom_label_repel(data=plotPCAvstData, aes(label=name))+
-  ggtitle(label="PCA plot of All Cells: VST Transformed Data")+
+  ggtitle(label=paste("PCA plot of", subsetToAnalyze, "Cells Line: VST Transformed Data"))+
   theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
 
-#PCA Plot using RLT Transformation #Almost a similar plot
+## PCA Plot using RLT Transformation #Almost a similar plot
 plotPCArld <- plotPCA(rld, intgroup="drug", returnData=FALSE, ntop=length(rld)) 
 plotPCArldData <- plotPCA(rld, intgroup="drug", returnData=TRUE, ntop=length(rld)) 
 pcaRLDAll <- plotPCArld+geom_label_repel(data=plotPCArldData, 
@@ -381,8 +389,8 @@ e <- as.character(c(ComparisonColumn, factor1, factor2))
 res <- lfcShrink(dds, contrast = e, type = "normal") #Shrinked Result (L2FC, padj etc); "normal" algorithm
 
 annotation_colors <- list(
-  drug = c("128-10"="#9FD900", 
-           "128-13"="#FAA800", 
+  drug = c("128.10"="#9FD900", 
+           "128.13"="#FAA800", 
            "130"="#ff5d8f", 
            "Control"="#6c757d"),
   
@@ -479,7 +487,7 @@ hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row",
               annotation_colors = annotation_colors_filtered,
               fontsize_row = 8,
               main=paste("Top 100 Fold Change:", subsetToAnalyze, "cell Line \n", "[", title, "]"))
-# saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128-13",h=12,w=12)
+# saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128.13",h=12,w=12)
 
 ##Save Gene Data for Venn Diagram Analysis----
 #TODO Modify data of saving flow
@@ -757,9 +765,10 @@ head(gene_list)
 ##GO comprises three orthogonal ontologies
 #MF: Molecular Function, 
 #BP: Biological Process,
-#CC: Cellular Component
+#CC: Cellular Component,
+#ALL: All Components
 
-onto = "CC"
+onto = "MF"
 dictionary <- c(ALL = "ALL", CC="Cellular Component", BP="Biological Process", MF="Molecular Function")
 
 # dictionary[[onto]]
@@ -776,13 +785,13 @@ gse <- gseGO(geneList = gene_list,
          pAdjustMethod = "none")
 
 # library(DOSE)
-options(enrichplot.colours = c("#e5383b","#007DEF")) #Set colors of Dotplot
+# options(enrichplot.colours = c("#e5383b","#007DEF")) #Set colors of Dotplot
 #### Dot Plot
 dotplot(gse, 
         font.size = 15,
         label_format = 35,# Width of the labels
-        title=paste("GO Gene Set Enrichment Analysis:", subsetToAnalyze, "Cell Line -",
-                    dictionary[[onto]], "-", "[", title, "]"),
+        title=paste0("GO Gene Set Enrichment Analysis \n", subsetToAnalyze, " Cell Line - ",
+                    dictionary[[onto]], " - ", "[", title, "]"),
         showCategory=5, 
         split=".sign") +
   facet_grid(.~.sign)+
@@ -799,8 +808,8 @@ emapplot(x2,
          shadowtext= TRUE, 
          font.size = 15,
          showCategory = 20) +
-  ggtitle(paste("GO Enrichment Map of GSE Analysis:", subsetToAnalyze, "Cell Line -",
-                dictionary[[onto]], "-", "[", title, "]"))+
+  ggtitle(paste0("GO Enrichment Map of GSE Analysis \n", subsetToAnalyze, " Cell Line - ",
+                dictionary[[onto]], " - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold"))
 
 
@@ -810,8 +819,8 @@ cnetplot(gse,
          categorySize="pvalue", 
          foldChange=gene_list, 
          showCategory = 3)+
-  ggtitle(paste("GO Enrichment Gene-Concept Network:", subsetToAnalyze, "Cell Line -",
-                dictionary[[onto]], "-", "[", title, "]"))+
+  ggtitle(paste0("GO Enrichment Gene-Concept Network \n", subsetToAnalyze, " Cell Line - ",
+                dictionary[[onto]], " - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold")) +
   labs(subtitle = "",
        caption = "Plot linkages of genes and enriched concepts in GO categories")
@@ -824,8 +833,8 @@ ridgeplot(gse,
           label_format = 35, # Width of the labels)
           showCategory = 10) +
   ggplot2::labs(x = "Enrichment Distribution")+
-  ggtitle(paste("GO Enrichment Distribution:", subsetToAnalyze, "Cell Line -",
-                dictionary[[onto]], "-", "[", title, "]"))+
+  ggtitle(paste0("GO Enrichment Distribution \n", subsetToAnalyze, " Cell Line - ",
+                dictionary[[onto]], " - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold")) +
   labs(subtitle = "",
        caption = "Ridgeline plot for GSEA result of Top 10 Categories")
@@ -901,7 +910,7 @@ kk2 = gseKEGG(geneList = kegg_gene_list,
 dotplot(kk2, showCategory = 5, 
         label_format = 35, # Width of the labels)
         font.size = 15,
-        title=paste("KEGG Gene Set Enrichment Analysis:", subsetToAnalyze, "Cell Line -", "[", title, "]"),
+        title=paste0("KEGG Gene Set Enrichment Analysis \n", subsetToAnalyze, " Cell Line - ", "[", title, "]"),
         split=".sign") +
   facet_grid(.~.sign) +
   theme(plot.title = element_text(size=15, face = "bold")) +
@@ -916,7 +925,7 @@ emapplot(k2,
          shadowtext= TRUE,
          font.size = 15,
          showCategory = 20)+
-  ggtitle(paste("KEGG Enrichment Map of GSE Analysis:", subsetToAnalyze, "Cell Line -", "[", title, "]"))+
+  ggtitle(paste0("KEGG Enrichment Map of GSE Analysis \n", subsetToAnalyze, " Cell Line - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold"))
 
 
@@ -926,7 +935,7 @@ cnetplot(kk2,
          categorySize="pvalue", 
          foldChange=gene_list, 
          showCategory = 3)+
-  ggtitle(paste("KEGG Enrichment Gene-Concept Network:", subsetToAnalyze, "Cell Line -","[", title, "]"))+
+  ggtitle(paste0("KEGG Enrichment Gene-Concept Network \n", subsetToAnalyze, " Cell Line - ","[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold")) +
   labs(subtitle = "",
        caption = "Plot linkages of genes and enriched concepts in KEGG categories")
@@ -940,7 +949,7 @@ ridgeplot(kk2,
           label_format = 35, # Width of the labels
           showCategory = 10) +
   ggplot2::labs(x = "Enrichment Distribution")+
-  ggtitle(paste("KEGG Enrichment Distribution:", subsetToAnalyze, "Cell Line -", "[", title, "]"))+
+  ggtitle(paste0("KEGG Enrichment Distribution \n", subsetToAnalyze, " Cell Line - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold")) +
   labs(subtitle = "",
        caption = "Ridgeline plot for GSEA result of Top 10 Categories")
@@ -985,6 +994,7 @@ r1 =pathview(gene.data = kegg_gene_list, pathway.id = "hsa04721", #Ids from gseK
 BiocManager::install("ReactomePA")
 BiocManager::install("reactome.db")
 library("reactome.db")
+remove.packages("ReactomePA")
 library("ReactomePA")
 data("geneList")
 head(geneList)
@@ -1007,9 +1017,17 @@ enrichmap(y)
 
 
 # Error: ReactomePA depends on reactome.db, which is not installing
+
+
 # Trying ReactomeGSA package
+# (https://bioconductor.org/packages/release/bioc/vignettes/ReactomeGSA/inst/doc/using-reactomegsa.html)
 BiocManager::install("ReactomeGSA")
 library(ReactomeGSA)
+
+available_methods <- get_reactome_methods(print_methods = FALSE, return_result = TRUE)
+
+available_methods$name
+
 reactome_result <- analyse_sc_clusters(kegg_gene_list, verbose = TRUE)
 
 ##=== GO Enrichment Analysis --Experimenting============
@@ -1069,12 +1087,12 @@ ego <- enrichGO(gene = gene,
 head(ego)
 
 #Induced GO DAG(Directed Acyclic Graph) of Significant Terms
-goplot(ego,
-       showCategory =50,#No effect
-       color = "p.adjust", #No effect
-       layout = "sugiyama", #No effect
-       geom = "text")+ #No effect
-  ggtitle(paste("GO Induced DAG Plot of Significant Terms:", subsetToAnalyze, "Cell Line -",
+goplot(ego)+
+       # showCategory =50,#No effect
+       # color = "p.adjust", #No effect
+       # layout = "sugiyama", #No effect
+       # geom = "text")+ #No effect
+  ggtitle(paste0("GO Induced DAG Plot of Significant Terms \n", subsetToAnalyze, " Cell Line - ",
                 dictionary["BP"], "-", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold")) +
   labs(subtitle = "",
@@ -1246,5 +1264,6 @@ ComplexUpset::upset(data = ComplexUpsetData,
   ggtitle("Intersection of DEGs Between Groups")
 # intersection_subset = c("Control_128.10", "Control_130", "Control_128.13")
 # arrangedVenn =  arrange_venn(ComplexUpsetData, sets=intersection_subset)
+
 
 
