@@ -380,7 +380,7 @@ print(pcaRLD500)
 
 ### DEG Prepare Data for Plot (INPUT NEEDED- Define Comparison Groups)----
 ComparisonColumn <- "drug"
-factor1 <- "130"
+factor1 <- "130" #Choose from 128.10, 128.13 & 130
 factor2 <- "Control"
 title <- paste(factor1, "vs", factor2)  
 # resultsNames(dds)
@@ -421,7 +421,7 @@ resdata <- resdata[complete.cases(resdata$Gene),] #Remove rows that don't have a
 resdata <- resdata[!duplicated(resdata$Gene),] #Remove rows with same gene, keeping significant ones (low padj)
 resdata <- resdata[order(resdata$log2FoldChange),] #Now order per log2FoldChange :Ascending
 
-### Find Top Bottom DEG ----
+#### Find Top Bottom DEG ----
 Top50Up<-head(resdata, 50)
 Top50Down<-tail(resdata, 50)
 Top100Rows<-rbind(Top50Up, Top50Down)
@@ -474,7 +474,6 @@ new_df$GeneName <- NULL
 Top100_f1vsf2_ordered <- new_df
 
 
-
 #### Plot Top 100 DEG ----
 hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row", 
               annotation_col=colData100_f1vsf2_ordered,
@@ -486,69 +485,142 @@ hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row",
               color= icolors,
               annotation_colors = annotation_colors_filtered,
               fontsize_row = 8,
-              main=paste("Top 100 Fold Change:", subsetToAnalyze, "cell Line \n", "[", title, "]"))
+              main=paste0("Top 100 Fold Change: ", subsetToAnalyze, " cell Line \n", "[", title, "]"))
 # saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128.13",h=12,w=12)
 
-##Save Gene Data for Venn Diagram Analysis----
-#TODO Modify data of saving flow
-#=Alternate Flow Start----------
-# Creating the data frame name and column name by concatenating factor1 and factor2
-factor_1 <- gsub("-", ".", factor1)
-factor_2 <- gsub("-", ".", factor2)
+#######Save Gene Data for Venn Diagram Analysis----
+###==VENN: Alternate Flow to Save *Top & Bottom DEG* Separately ----
+# Run after every new set of Top50 and Bottom50; this appends lists to listInputz
+# rm(listInputz) #Remove the previously existing listInputz object if not want to append
+# Initialize the listInputz if it doesn't exist
+if (!exists("listInputz")) {
+  listInputz <- list()
+}
 
-list_name_up <- paste0(subsetToAnalyze, "_", factor_2, "_", factor_1, "_Up")
-list_name_down <- paste0(subsetToAnalyze, "_", factor_2, "_", factor_1, "_Down")
+# Generate the list names based on the provided variables
+list_name_up <- paste0(subsetToAnalyze, "_", factor2, "_", factor1, "_Up")
+list_name_down <- paste0(subsetToAnalyze, "_", factor2, "_", factor1, "_Down")
 
 # Extracting the values from the "Gene" column of Top50Up and Top50Down
 genes_up <- Top50Up$Gene
 genes_down <- Top50Down$Gene
 
-# Assigning the lists to variables with the desired names
-assign(list_name_up, genes_up)
-assign(list_name_down, genes_down)
-
-# Print the names and contents of the newly created lists
-print(list_name_up)
-print(list_name_down)
-print(get(list_name_up))
-print(get(list_name_down))
-
-# Combine into a single list
-listInputx <- list(
-  Up = as.list(Top50Up$Gene),
-  Down = as.list(Top50Down$Gene)
-)
-listInputy <- list(
-  Up = as.list(as.vector("358_Control_130_Up")),
-  Down = as.list(as.vector("358_Control_130_Down"))
-)
-listInputz <- list(
-  Up = as.list(get(list_name_up)),
-  Down = as.list(get(list_name_down))
-)
-print(listInputx)
-ggVennDiagram::ggVennDiagram(listInputz, label_alpha = 0.5)
-
-# Create the listInput list using the dynamically named lists
-listInputx <- list(
-  setNames(list(get(list_name_up)), list_name_up),
-  setNames(list(get(list_name_down)), list_name_down)
+# Create the new lists to be appended
+new_lists <- list(
+  setNames(list(as.list(genes_up)), list_name_up),
+  setNames(list(as.list(genes_down)), list_name_down)
 )
 
-# Display the resulting list
-print(listInputx)
-ggVennDiagram::ggVennDiagram(listInputx, label_alpha = 0.5)
+# Append new lists to listInputz if they don't already exist
+for (new_list in new_lists) {
+  new_list_name <- names(new_list)
+  if (!new_list_name %in% names(listInputz)) {
+    listInputz <- c(listInputz, new_list)
+  }
+}
 
+# Print listInputz to verify the contents
+print(listInputz)
+##RUN TO PLOT: When listInputz has all sets of required data----
+#VENN DIAGRAM: listInputz as input
+ggVennDiagram::ggVennDiagram(listInputz, label_alpha = 0.5)+
+  scale_fill_gradient(low = "white", high = "blue") +
+  ggtitle(paste0(subsetToAnalyze, " cell Line \n", "Up and Down DEG Between Groups")) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none"
+  )
+#UPSET PLOT: listInputz as input 
+library(UpSetR)
+#UpSetR::upset(as.data.frame(upsetData), 
+UpSetR::upset(fromList(listInputz), 
+              nsets = 6,
+              #sets = c("Control_128.10", "Control_130", "Control_128.13"),
+              number.angles = 0,
+              mb.ratio = c(0.65, 0.35),
+              point.size = 5,
+              line.size = 1.3,
+              order.by = "freq",
+              #group.by = "freq",
+              mainbar.y.label = "Number of Common DEG",
+              sets.x.label = "Number of Top DEG",
+              main.bar.color = "#6666FF",
+              sets.bar.color = "#30C38B" , #flouroscent green
+              matrix.color = "#007DEF", #pink #FF6699", #orange
+              matrix.dot.alpha = 0.1,
+              shade.color = "#999",
+              empty.intersections = "on",
+              text.scale = c(1.8, 2, 1.2, 1, 2, 2),
+              #text.scale = 1.5,
+              keep.order = TRUE)
 
-# Create the listInput list using the dynamically named lists
-listInput <- list(
-  setNames(get(list_name_up), list_name_up),
-  setNames(get(list_name_down), list_name_down)
-)
-# Display the resulting list
+##=========Experiment: Attempting to extract each group of from the upset plot
+UpsetPlotData <- unlist(listInputz, use.names = TRUE)
+head(UpsetPlotData)
 
-#=Alternate Flow Skip Ends-----
-##Save for Venn Diagram Analysis
+UpsetPlotData <- UpsetPlotData[!duplicated(UpsetPlotData)]
+intersection123z <- Reduce(intersect, listInputz)
+print(paste("Intersection", toString(intersection123z)))
+
+###=Alternate Flow Skip Ends-----
+
+###==VENN: Alternate *All DEG* Flow to Save *All DEG* for Venn Diagram Analysis----
+# Initialize the listInput if it doesn't exist
+if (!exists("listInput")) {
+  listInput <- list()
+}
+
+# Generate the list name based on the provided variables
+list_name <- paste0(subsetToAnalyze, "_", factor2, "_", factor1)
+
+# Extract the row names from Top100_f1vsf2_ordered
+genes <- rownames(Top100_f1vsf2_ordered)
+
+# Create the new list to be appended
+new_list <- setNames(list(as.list(genes)), list_name)
+
+# Append the new list to listInput if it doesn't already exist
+if (!list_name %in% names(listInput)) {
+  listInput <- c(listInput, new_list)
+}
+
+# Print listInput to verify the contents
+print(listInput)
+
+##RUN TO PLOT: When listInput has all sets of required data----
+#VENN DIAGRAM: listInput as input
+ggVennDiagram::ggVennDiagram(listInput, label_alpha = 0.5)+
+  scale_fill_gradient(low = "white", high = "blue") +
+  ggtitle(paste0(subsetToAnalyze, " cell Line \n", "DEG Between Groups")) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none"
+  )
+#UPSET PLOT: listInput as input 
+library(UpSetR)
+#UpSetR::upset(as.data.frame(upsetData), 
+UpSetR::upset(fromList(listInput), 
+              nsets = 3, #Modify to include total number of lists
+              #sets = c("Control_128.10", "Control_130", "Control_128.13"),
+              number.angles = 0,
+              mb.ratio = c(0.65, 0.35),
+              point.size = 5,
+              line.size = 1.3,
+              order.by = "freq",
+              #group.by = "freq",
+              mainbar.y.label = "Number of Common DEG",
+              sets.x.label = "Number of Top DEG",
+              main.bar.color = "#6666FF",
+              sets.bar.color = "#30C38B" , #flouroscent green
+              matrix.color = "#007DEF", #pink #FF6699", #orange
+              matrix.dot.alpha = 0.1,
+              shade.color = "#999",
+              empty.intersections = "on",
+              text.scale = c(1.8, 2, 1.2, 1, 2, 2),
+              #text.scale = 1.5,
+              keep.order = TRUE)
+###=Alternate *All DEG* Flow Ends-----
+
+######VENN:  OLD WAY OF Manual List creation and Venn diagram ----
+#Create individual lists each time
 row_names <- rownames(Top100_f1vsf2_ordered)
 # T50Control_130 <- data.frame(matrix(ncol = 1, nrow = length(row_names)))
 # T50Control_130 <- data.frame(ColumnNames = column_names)
@@ -557,6 +629,46 @@ row_names <- rownames(Top100_f1vsf2_ordered)
 #T50Control_128.13 <- data.frame(Control_128.13 = row_names)
 T50Control_130 <- data.frame(Control_130 = row_names)
 # head(T50Control_130)
+#### OLD WAY Venn Diagram for DEGs ----
+###Prepare data for Venn and Upset Plots
+T50Merged <- cbind(T50Control_128.10, T50Control_130, T50Control_128.13)
+listInput <- list(
+  Control_128.10 = T50Merged$Control_128.10,
+  Control_130 = T50Merged$Control_130,
+  Control_128.13 = T50Merged$Control_128.13
+)
+upsetData <- data.frame(listInput)
+#install.packages("ggVennDiagram")
+library(ggVennDiagram)
+# Create the Venn diagram #DONT CREATE LIST
+# venn_data <- list(
+#   "Control vs 128.10" = Control_128.10,
+#   "Control vs 130" = Control_130,
+#   "Control vs 128.13" = Control_128.13
+# )
+
+## Plot using ggVennDiagram===
+ggVennDiagram::ggVennDiagram(listInput, label_alpha = 0.5) +
+  #ggVennDiagram::ggVennDiagram(upsetData, label_alpha = 0.5) + #Works too
+  scale_fill_gradient(low = "white", high = "blue") +
+  ggtitle(paste(subsetToAnalyze, "cell Line \n", "Top100 DEG Between Groups")) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none"
+  )  # Change background color
+
+# Find intersections
+# intersection_12 <- intersect(Control_128.10, Control_130)
+# intersection_13 <- intersect(Control_128.10, Control_128.13)
+# intersection_123 <- Reduce(intersect, list(Control_128.10, Control_130, Control_128.13))
+
+# intersection_all <- Reduce(intersect, list(set1, set2, set3, set4))
+# Print intersections
+print(paste("Intersection of Set1 and Set2:", toString(intersection_12)))
+print(paste("Intersection of Set1, Set2, and Set3:", toString(intersection_123)))
+print(paste("Intersection of all sets:", toString(intersection_all)))
+
+intersection123 <- Reduce(intersect, listInput)
+print(paste("Intersection", toString(intersection123)))
 
 #=SKIP-START Complex Heatmap Code----
 ## Complex Heat Map Code--
@@ -634,7 +746,7 @@ legends <- packLegend(legend_drug, legend_cellLine)
 # Draw the heatmap with custom legends
 draw(hm25, heatmap_legend_side = "right", annotation_legend_side = "right", annotation_legend_list = legends)
 
-#=SKIP-ENDS ComplexHeatmap Code Ends----
+#==SKIP-ENDS ComplexHeatmap Code Ends----
 ##### Variable Genes ----
 #A copy of resdata which is already based on a comparison pair
 resdataf1vsf2 <- resdata
@@ -649,7 +761,7 @@ topVarGenes <- head(order(-genefilter::rowVars(resdataf1vsf2)),100)
 mat <- resdataf1vsf2[topVarGenes, ]
 mat <- mat - rowMeans(mat)
 
-#=SKIP-START If !(Show Only Once Cell Line) Now pipeline is branched based on cell line----
+#=SKIP-START If !(Show Only Once Cell Line) Now pipeline has branched logic, so no need for this---
 cellLineToPlot <- "358"
 # Find columns with "318" in their names
 DsKeepCols <- grep(cellLineToPlot, names(resdataf1vsf2), value = TRUE)
@@ -658,8 +770,8 @@ resdataf1vsf2 <- resdataf1vsf2[, DsKeepCols]
 topVarGenes <- head(order(-genefilter::rowVars(resdataf1vsf2)),100)
 mat <- resdataf1vsf2[topVarGenes, ]
 mat <- mat - rowMeans(mat)
-#=SKIP-ENDS-----
-### Plot Variable Genes----
+#=SKIP-ENDS---
+## Plot Variable Genes--
 #plot the variable genes in heatmap
 hmVariable<-pheatmap::pheatmap(mat,
                       annotation_col=colData,
@@ -736,9 +848,32 @@ pathways <- gsea_hallmark@result$Description
 #Path23Control_128.10 <- data.frame(Control_128.10 = pathways)
 #Path23Control_128.13 <- data.frame(Control_128.13 = pathways)
 Path23Control_130 <- data.frame(Control_130 = pathways)
+##== HALLMARK VENN :TODO Improve Flow for Venn Diagram for Pathway Analysis----
+##Pathway Venn Diagram
+# PathwayMerged <- cbind(Path23Control_128.10, Path23Control_128.13, Path23Control_130)
+# pathwayVennInput <- list(
+#   Control_128.10 = PathwayMerged$Control_128.10,
+#   Control_130 = PathwayMerged$Control_130,
+#   Control_128.13 = PathwayMerged$Control_128.13 
+# )
 
+pathwayVennInput <- list(
+  Control_128.10 = as.list(as.vector(Path23Control_128.10[,1])),
+  Control_130 = as.list(as.vector(Path23Control_130[,1])),
+  Control_128.13 = as.list(as.vector(Path23Control_128.13[,1]))
+)
+upsetPathwayData <- data.frame(pathwayVennInput)
+ggVennDiagram::ggVennDiagram(pathwayVennInput, label_alpha = 0.5) +
+  #ggVennDiagram::ggVennDiagram(upsetData, label_alpha = 0.5) + #Works too
+  scale_fill_gradient(low = "white", high = "blue") +
+  ggtitle(paste(subsetToAnalyze, "cell Line \n", "Common Significant Hallmark Pathways Between Groups")) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none"
+  )
+intersectionPathways <- Reduce(intersect, pathwayVennInput)
+print(paste("Intersection", toString(intersectionPathways)))
 
-##### GO: Pathway Analysis with GO Params (https://learn.gencore.bio.nyu.edu/rna-seq-analysis/deseq-2/)----
+##### GO: Pathway Analysis with GO (https://learn.gencore.bio.nyu.edu/rna-seq-analysis/deseq-2/)----
 ########## Input: List of descending log2FoldChange with names as Genes
 # library(clusterProfiler)
 # library(enrichplot)
@@ -1003,20 +1138,15 @@ dim(kegg_gene_list)
 de <- names(kegg_gene_list)[abs(kegg_gene_list) > 1.2] #Pick the highly foldchanged ones
 length(de)
 head(de)
-
-
-
 x <- enrichPathway(gene=de, pvalueCutoff=0.05, readable=T)
 y <- gsePathway(geneList = kegg_gene_list,
                 minGSSize=120,
                 pvalueCutoff=0.05,
                 pAdjustMethod="BH",
                 verbose=TRUE)
-
 enrichmap(y)
 
-
-# Error: ReactomePA depends on reactome.db, which is not installing
+# ↑ Error: ReactomePA depends on reactome.db, which is not installing
 
 
 # Trying ReactomeGSA package
@@ -1118,72 +1248,8 @@ goplot(ego)+
 #   labs(size="Count", colour="Median logFC")
 
 ############################################ --
-##### Venn Diagram & Upset Plot ----
-#### Venn Diagram for DEGs ----
-###Prepare data for Venn and Upset Plots
-T50Merged <- cbind(T50Control_128.10, T50Control_130, T50Control_128.13)
-listInput <- list(
-  Control_128.10 = T50Merged$Control_128.10,
-  Control_130 = T50Merged$Control_130,
-  Control_128.13 = T50Merged$Control_128.13
-)
-upsetData <- data.frame(listInput)
-#install.packages("ggVennDiagram")
-library(ggVennDiagram)
-# Create the Venn diagram #DONT CREATE LIST
-# venn_data <- list(
-#   "Control vs 128.10" = Control_128.10,
-#   "Control vs 130" = Control_130,
-#   "Control vs 128.13" = Control_128.13
-# )
 
-## Plot using ggVennDiagram===
-ggVennDiagram::ggVennDiagram(listInput, label_alpha = 0.5) +
-#ggVennDiagram::ggVennDiagram(upsetData, label_alpha = 0.5) + #Works too
-  scale_fill_gradient(low = "white", high = "blue") +
-  ggtitle(paste(subsetToAnalyze, "cell Line \n", "Top100 DEG Between Groups")) +
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none"
-  )  # Change background color
-
-# Find intersections
-# intersection_12 <- intersect(Control_128.10, Control_130)
-# intersection_13 <- intersect(Control_128.10, Control_128.13)
-# intersection_123 <- Reduce(intersect, list(Control_128.10, Control_130, Control_128.13))
-
-# intersection_all <- Reduce(intersect, list(set1, set2, set3, set4))
-# Print intersections
-print(paste("Intersection of Set1 and Set2:", toString(intersection_12)))
-print(paste("Intersection of Set1, Set2, and Set3:", toString(intersection_123)))
-print(paste("Intersection of all sets:", toString(intersection_all)))
-
-intersection123 <- Reduce(intersect, listInput)
-print(paste("Intersection", toString(intersection123)))
-
-#### Venn Diagram for Pathway Analysis----
-##Pathway Venn Diagram
-# PathwayMerged <- cbind(Path23Control_128.10, Path23Control_128.13, Path23Control_130)
-# pathwayVennInput <- list(
-#   Control_128.10 = PathwayMerged$Control_128.10,
-#   Control_130 = PathwayMerged$Control_130,
-#   Control_128.13 = PathwayMerged$Control_128.13 
-# )
-
-pathwayVennInput <- list(
-  Control_128.10 = as.list(as.vector(Path23Control_128.10[,1])),
-  Control_130 = as.list(as.vector(Path23Control_130[,1])),
-  Control_128.13 = as.list(as.vector(Path23Control_128.13[,1]))
-)
-upsetPathwayData <- data.frame(pathwayVennInput)
-ggVennDiagram::ggVennDiagram(pathwayVennInput, label_alpha = 0.5) +
-  #ggVennDiagram::ggVennDiagram(upsetData, label_alpha = 0.5) + #Works too
-  scale_fill_gradient(low = "white", high = "blue") +
-  ggtitle(paste(subsetToAnalyze, "cell Line \n", "Common Significant Hallmark Pathways Between Groups")) +
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "none"
-  )
-intersectionPathways <- Reduce(intersect, pathwayVennInput)
-print(paste("Intersection", toString(intersectionPathways)))
+######## Extra Tools ↓----
 
 #### Get Gene Name from Gene Symbol ----
 genelist <- data.frame(GeneSymbol = unlist(intersection123))
