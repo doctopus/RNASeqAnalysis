@@ -131,7 +131,7 @@ head(fc2)
 ##### Make DDSObject (INPUT NEEDED- Define if Doing Subset Analysis) ----
 ### ############################### ###
 #subsetToAnalyze <- NULL #If not performing subset analysis
-subsetToAnalyze <- "318" # Define 318 or 358 cellLine Subset to analyze 
+subsetToAnalyze <- "358" # Define 318 or 358 cellLine Subset to analyze 
 ### ############################### ###
 perform_subset_analysis <- !is.null(subsetToAnalyze) && subsetToAnalyze != ""
 # Perform conditional branching
@@ -296,9 +296,9 @@ ggplot(plotCount, aes(x=drug, y=count, color =drug))+
 
 ##### DDS Apply Transformation ----
 # Apply transformation & estimate dispersion trend
-vsd <- vst(dds, blind = FALSE) # VST: Variance Stabilizing Transformation
+# vsd <- vst(dds, blind = FALSE) # VST: Variance Stabilizing Transformation
 rld <- rlog(dds, blind=FALSE) # RLT: Regularized Log Transformation (Selected for this analysis)
-head(assay(vsd), 2)
+# head(assay(vsd), 2)
 head(assay(rld), 2)
 
 ### Heatmaps ----
@@ -466,9 +466,19 @@ new_df <- Top100_f1vsf2_ordered
 new_df$GeneName <- gene_names[rownames(Top100_f1vsf2_ordered)]
 # Convert GeneName to sentence case
 new_df <- new_df %>% mutate(GeneName = sapply(GeneName, sentence_case))
+# Append GeneName(Symbol) to The GeneName column
+new_df$GeneName <- paste(rownames(Top100_f1vsf2_ordered), new_df$GeneName, sep = ": ")
+##MANUALLY Save this data in spreadsheet
+new_df_control_130 <- new_df %>% select("GeneName")
+# install.packages("clipr")
+library(clipr)
+# Export the data frame to clipboard
+write_clip(new_df_control_130)
+
 # Append GeneName to row names separated by ":"
 rownames(new_df) <- paste(rownames(Top100_f1vsf2_ordered), new_df$GeneName, sep = ": ")
-# Remove the GeneName column if no longer needed
+
+##Remove the GeneName column if no longer needed
 new_df$GeneName <- NULL
 # Assign it back as the Top100_f1vsf2_ordered
 Top100_f1vsf2_ordered <- new_df
@@ -489,7 +499,8 @@ hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row",
 # saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128.13",h=12,w=12)
 
 #######Save Gene Data for Venn Diagram Analysis----
-###==VENN: Alternate Flow to Save *Top & Bottom DEG* Separately ----
+
+###==VENN: Alternate *Top & Bottom* Flow to Save *Top & Bottom DEG* Separately ----
 # Run after every new set of Top50 and Bottom50; this appends lists to listInputz
 # rm(listInputz) #Remove the previously existing listInputz object if not want to append
 # Initialize the listInputz if it doesn't exist
@@ -670,83 +681,7 @@ print(paste("Intersection of all sets:", toString(intersection_all)))
 intersection123 <- Reduce(intersect, listInput)
 print(paste("Intersection", toString(intersection123)))
 
-#=SKIP-START Complex Heatmap Code----
-## Complex Heat Map Code--
-# library(ComplexHeatmap)
-# library(circlize)
 
-# col_fun <- colorRamp2(c(min(Top25), median(Top25), max(Top25)), c("blue", "white", "red"))
-# Adjust color mapping to ensure proper visualization
-col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
-title <- paste("Top 100 Fold Change:", factor2, "vs", factor1)
-
-# Ensure the 'drug' column in colData is a factor with the correct order
-#colData$drug <- factor(colData25$drug, levels = c("Control", "130"))
-# Order the columns by 'drug'
-ordered_indices <- order(colData25$drug, decreasing = TRUE)
-Top25_ordered <- Top25[, ordered_indices]
-colData25_ordered <- colData25[ordered_indices, ]
-
-# Filter annotation colors to include only relevant levels
-annotation_colors_filtered <- list(
-  drug = annotation_colors$drug[names(annotation_colors$drug) %in% unique(colData25_ordered$drug)],
-  cellLine = annotation_colors$cellLine[names(annotation_colors$cellLine) %in% unique(colData25_ordered$cellLine)]
-)
-
-# Create the combined column annotations with drug above cellLine
-ha_combined <- HeatmapAnnotation(
-  df = data.frame(drug = colData25_ordered$drug, cellLine = colData25_ordered$cellLine),
-  col = annotation_colors_filtered,
-  annotation_name_side = "right",
-  show_annotation_name = TRUE,
-  annotation_name_gp = gpar(fontsize = 12, fontface = "bold"),
-  show_legend = T # Disable legends in the annotation to custom order the legends using library(grid)
-)
-
-# Scale the rows
-Top25_scaled <- t(scale(t(Top25_ordered)))
-
-# Create the heatmap
-hm25 <- Heatmap(
-  Top25_scaled,
-  name = "Expression",
-  cluster_rows = T,
-  cluster_columns = F,
-  col = col_fun,
-  top_annotation = ha_combined,
-  column_title = title,
-  row_names_gp = gpar(fontsize = 5),
-  column_names_gp = gpar(fontsize = 10),
-  #column_split = colData25$drug,
-  column_names_rot = 45,
-  cell_fun = function(j, i, x, y, width, height, fill) {
-    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "grey", lwd = 0.5))
-  }
-) 
-# Optional: Customize the legend orders
-# library(grid)
-# Create custom legends for each annotation
-legend_drug <- Legend(
-  at = rev(names(annotation_colors_filtered$drug)),
-  labels = rev(names(annotation_colors_filtered$drug)),
-  title = "Drug",
-  legend_gp = gpar(fill = rev(annotation_colors_filtered$drug))
-)
-
-legend_cellLine <- Legend(
-  at = names(annotation_colors_filtered$cellLine),
-  labels = names(annotation_colors_filtered$cellLine),
-  title = "Cell Line",
-  legend_gp = gpar(fill = annotation_colors_filtered$cellLine)
-)
-
-# Combine the legends in the desired order
-legends <- packLegend(legend_drug, legend_cellLine)
-
-# Draw the heatmap with custom legends
-draw(hm25, heatmap_legend_side = "right", annotation_legend_side = "right", annotation_legend_list = legends)
-
-#==SKIP-ENDS ComplexHeatmap Code Ends----
 ##### Variable Genes ----
 #A copy of resdata which is already based on a comparison pair
 resdataf1vsf2 <- resdata
@@ -887,9 +822,11 @@ resdata_go <- resdata_go[!is.na(resdata_go$Gene),] #Remove rows without Gene dat
 ordered_data <- resdata_go[order(-resdata_go$log2FoldChange),] #Order by decreasing log2fc
 
 original_gene_list <- ordered_data$log2FoldChange #Take the log2FC column only
+
 #Name the vector
 names(original_gene_list) <- ordered_data$Gene #Assign Row names as their corresponding Gene
-
+# view(original_gene_list)
+#May use ↑ this Original_gene_list in KEGG Cluster Network Plot
 
 gene_list = na.omit(original_gene_list) #Omit any NA values (Previously Done)
 head(gene_list)
@@ -1028,7 +965,7 @@ kegg_gene_list = na.omit(kegg_gene_list)
 
 #Sort in decreasing order (required for clusterProfiler)
 kegg_gene_list = sort(kegg_gene_list, decreasing = TRUE)
-head(kegg_gene_list)
+# view(kegg_gene_list)
 
 
 kegg_organism = "hsa"
@@ -1075,6 +1012,19 @@ cnetplot(kk2,
   labs(subtitle = "",
        caption = "Plot linkages of genes and enriched concepts in KEGG categories")
 
+head(kk2@geneList)
+
+#### Category Net Plot -with Gene Name
+#Translate Entrez ID to Gene Symbol 
+kk3 <- setReadable(kk2, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+cnetplot(kk3, 
+         categorySize="pvalue", 
+         foldChange=gene_list, 
+         showCategory = 3)+
+  ggtitle(paste0("KEGG Enrichment Gene-Concept Network \n", subsetToAnalyze, " Cell Line - ","[", title, "]"))+
+  theme(plot.title = element_text(size=15, face = "bold")) +
+  labs(subtitle = "",
+       caption = "Plot linkages of genes and enriched concepts in KEGG categories")
 
 #### Ridge Plot
 #Grouped by gene set, density plots are generated by using the frequency of fold change values per gene within each set. 
@@ -1249,7 +1199,7 @@ goplot(ego)+
 
 ############################################ --
 
-######## Extra Tools ↓----
+###### Extra Goodies: Not Part of main code: May be removed ↓----
 
 #### Get Gene Name from Gene Symbol ----
 genelist <- data.frame(GeneSymbol = unlist(intersection123))
@@ -1265,13 +1215,13 @@ genelist$GeneName <- gene_names[genelist$GeneSymbol]
 #Convert to sentence case (Function defined at the top)
 genelist <- genelist %>% mutate(GeneName = sapply(GeneName, sentence_case))
 
-## Export to clipboard-
+#### Export to clipboard----
 install.packages("clipr")
 library(clipr)
 # Export the data frame to clipboard
 write_clip(genelist)
 
-## Print table as image-
+#### Print table as image----
 install.packages("gt")
 library(gt)
 gt_table <- gt(genelist) %>% tab_header (title = paste("Common DEG in ",subsetToAnalyze, "Cell Line"))
@@ -1279,29 +1229,30 @@ gtsave(gt_table, paste0(subsetToAnalyze, " Common DEG List 358", ".png"), path= 
 
 
 #### Upset Plot===----
+#Upset plot.. May be removed since it is moved to new code.
 # install.packages("UpSetR")
 library(UpSetR)
 #UpSetR::upset(as.data.frame(upsetData), 
 UpSetR::upset(fromList(listInput), 
-      nsets = 3,
-      #sets = c("Control_128.10", "Control_130", "Control_128.13"),
-      number.angles = 0,
-      mb.ratio = c(0.65, 0.35),
-      point.size = 5,
-      line.size = 1.3,
-      order.by = "freq",
-      #group.by = "freq",
-      mainbar.y.label = "Number of Common DEG",
-      sets.x.label = "Number of Top DEG",
-      main.bar.color = "#6666FF",
-      sets.bar.color = "#7DD305" , #flouroscent green
-      matrix.color = "#FF6699", #pink #FF7D58", #orange
-      matrix.dot.alpha = 0.1,
-      shade.color = "#999",
-      empty.intersections = "on",
-      text.scale = c(1.8, 2, 1.2, 1, 2, 2),
-      #text.scale = 1.5,
-      keep.order = TRUE)
+              nsets = 3,
+              #sets = c("Control_128.10", "Control_130", "Control_128.13"),
+              number.angles = 0,
+              mb.ratio = c(0.65, 0.35),
+              point.size = 5,
+              line.size = 1.3,
+              order.by = "freq",
+              #group.by = "freq",
+              mainbar.y.label = "Number of Common DEG",
+              sets.x.label = "Number of Top DEG",
+              main.bar.color = "#6666FF",
+              sets.bar.color = "#7DD305" , #flouroscent green
+              matrix.color = "#FF6699", #pink #FF7D58", #orange
+              matrix.dot.alpha = 0.1,
+              shade.color = "#999",
+              empty.intersections = "on",
+              text.scale = c(1.8, 2, 1.2, 1, 2, 2),
+              #text.scale = 1.5,
+              keep.order = TRUE)
 
 #### ComplexHeatmap::Upset===----
 m <- make_comb_mat(listInput)
@@ -1333,3 +1284,79 @@ ComplexUpset::upset(data = ComplexUpsetData,
 
 
 
+
+###=Alternative way to plot DEG Heatmap: Complex Heatmap Code----
+## Complex Heat Map Code--
+# library(ComplexHeatmap)
+# library(circlize)
+
+# col_fun <- colorRamp2(c(min(Top25), median(Top25), max(Top25)), c("blue", "white", "red"))
+# Adjust color mapping to ensure proper visualization
+col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
+title <- paste("Top 100 Fold Change:", factor2, "vs", factor1)
+
+# Ensure the 'drug' column in colData is a factor with the correct order
+#colData$drug <- factor(colData25$drug, levels = c("Control", "130"))
+# Order the columns by 'drug'
+ordered_indices <- order(colData25$drug, decreasing = TRUE)
+Top25_ordered <- Top25[, ordered_indices]
+colData25_ordered <- colData25[ordered_indices, ]
+
+# Filter annotation colors to include only relevant levels
+annotation_colors_filtered <- list(
+  drug = annotation_colors$drug[names(annotation_colors$drug) %in% unique(colData25_ordered$drug)],
+  cellLine = annotation_colors$cellLine[names(annotation_colors$cellLine) %in% unique(colData25_ordered$cellLine)]
+)
+
+# Create the combined column annotations with drug above cellLine
+ha_combined <- HeatmapAnnotation(
+  df = data.frame(drug = colData25_ordered$drug, cellLine = colData25_ordered$cellLine),
+  col = annotation_colors_filtered,
+  annotation_name_side = "right",
+  show_annotation_name = TRUE,
+  annotation_name_gp = gpar(fontsize = 12, fontface = "bold"),
+  show_legend = T # Disable legends in the annotation to custom order the legends using library(grid)
+)
+
+# Scale the rows
+Top25_scaled <- t(scale(t(Top25_ordered)))
+
+# Create the heatmap
+hm25 <- Heatmap(
+  Top25_scaled,
+  name = "Expression",
+  cluster_rows = T,
+  cluster_columns = F,
+  col = col_fun,
+  top_annotation = ha_combined,
+  column_title = title,
+  row_names_gp = gpar(fontsize = 5),
+  column_names_gp = gpar(fontsize = 10),
+  #column_split = colData25$drug,
+  column_names_rot = 45,
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "grey", lwd = 0.5))
+  }
+) 
+# Optional: Customize the legend orders
+# library(grid)
+# Create custom legends for each annotation
+legend_drug <- Legend(
+  at = rev(names(annotation_colors_filtered$drug)),
+  labels = rev(names(annotation_colors_filtered$drug)),
+  title = "Drug",
+  legend_gp = gpar(fill = rev(annotation_colors_filtered$drug))
+)
+
+legend_cellLine <- Legend(
+  at = names(annotation_colors_filtered$cellLine),
+  labels = names(annotation_colors_filtered$cellLine),
+  title = "Cell Line",
+  legend_gp = gpar(fill = annotation_colors_filtered$cellLine)
+)
+
+# Combine the legends in the desired order
+legends <- packLegend(legend_drug, legend_cellLine)
+
+# Draw the heatmap with custom legends
+draw(hm25, heatmap_legend_side = "right", annotation_legend_side = "right", annotation_legend_list = legends)
