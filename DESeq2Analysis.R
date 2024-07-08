@@ -150,7 +150,7 @@ if (all(colnames(countData) == rownames(colData))) {
 } else {
   stop("Column names of countData do not match row names of colData")
 }
-# Create DESeqDataSet object
+#### Create DESeqDataSet object----
 ddsObject <- DESeqDataSetFromMatrix(countData = countData,
                                     colData = colData,
                                     design = design_formula)
@@ -421,11 +421,45 @@ resdata <- resdata[complete.cases(resdata$Gene),] #Remove rows that don't have a
 resdata <- resdata[!duplicated(resdata$Gene),] #Remove rows with same gene, keeping significant ones (low padj)
 resdata <- resdata[order(resdata$log2FoldChange),] #Now order per log2FoldChange :Ascending
 
-#### Find Top Bottom DEG ----
-Top50Up<-head(resdata, 50)
-Top50Down<-tail(resdata, 50)
-Top100Rows<-rbind(Top50Up, Top50Down)
+####SKIP STARTS if !(Need only list of Top and Bottom as separate lists)----
+TopN <- 10
+Criteria <- "Down" # "Up" or "Down"
 
+if (Criteria == "Up") {
+  TopX <- head(resdata, TopN)
+} else if (Criteria == "Down") {
+  TopX <- tail(resdata, TopN)
+} else {
+  stop("Invalid value for Criteria. Select either 'Up' or 'Down'")
+}
+
+# Find the column names that contain either factor1 or factor2
+columns_to_keep <- grep(paste(factor1, factor2, "Gene", "log2FoldChange", "padj", sep = "|"), names(TopX), value = TRUE)
+TopX <- TopX[, columns_to_keep]
+gene_names <- mapIds(org.Hs.eg.db,
+                     keys = TopX$Gene,
+                     column = "GENENAME",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+
+TopX$GeneName <- gene_names[TopX$Gene]
+TopX <- TopX %>% mutate(GeneName = sapply(GeneName, sentence_case))
+DetailsColName <- paste(subsetToAnalyze, "CellLine", factor1, "vs",factor2,  Criteria, "Regulated", sep = "_")
+TopX[, DetailsColName] <- paste(TopX$Gene, TopX$GeneName, sep = ": ")
+
+##MANUALLY Save this data in spreadsheet
+df_temp <- TopX %>% dplyr::select(DetailsColName)
+# install.packages("clipr")
+# library(clipr)
+# Export the data frame to clipboard
+write_clip(df_temp)
+
+####SKIP ENDS if !(Need only list of Top and Bottom as separate lists)----
+#### Find Top Bottom DEG to Plot----
+TopN <- 50
+Top50Up<-head(resdata, TopN)
+Top50Down<-tail(resdata, TopN)
+Top100Rows<-rbind(Top50Up, Top50Down)
 R <- as.character(rownames(colData))
 # R<-c(R, "Gene")
 Top100<-Top100Rows %>% dplyr::select(all_of(R), "Gene") #Keep selected columns
@@ -495,7 +529,7 @@ hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row",
               color= icolors,
               annotation_colors = annotation_colors_filtered,
               fontsize_row = 8,
-              main=paste0("Top 100 Fold Change: ", subsetToAnalyze, " cell Line \n", "[", title, "]"))
+              main=paste0("Top 300 Fold Change: ", subsetToAnalyze, " cell Line \n", "[", title, "]"))
 # saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128.13",h=12,w=12)
 
 #######Save Gene Data for Venn Diagram Analysis----
