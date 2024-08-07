@@ -1,4 +1,5 @@
 # Downstream Analysis of RNASeq
+
 ##### Define Functions ----
 setupProject <- function(project) {
   #Create 'project' dir if not same as name of *.Rproj dir as root/proj/io, else
@@ -73,14 +74,16 @@ install_and_load_packages <- function(cran_packages, bioc_packages) {
   all_packages <- c(cran_packages, bioc_packages)
   sapply(all_packages, require, character.only = TRUE)
 }
-sentence_case <- function(name) { # Sentence case first word if not uppercase with/out numbers/"-" (eg.DN-A1)
+sentence_case <- function(name) { 
+  # Sentence case first word if not uppercase with/out numbers/"-" (eg.DN-A1)
   # Split the sentence into words
   words <- unlist(strsplit(name, " "))
   # Check if the first word should be converted
   first_word <- words[1]
   if (!grepl("^[A-Z0-9]+$", first_word) && !grepl("-", first_word)) {
     # Convert the first word to sentence case
-    words[1] <- paste0(toupper(substring(first_word, 1, 1)), tolower(substring(first_word, 2)))
+    words[1] <- paste0(toupper(substring(first_word, 1, 1)), 
+                       tolower(substring(first_word, 2)))
   }
   # Join the words back into a sentence
   return(paste(words, collapse = " "))
@@ -92,7 +95,7 @@ setupProject("RNASeqAnalysis") ; print(paste0("Working dir is: ", getwd()))
 # output_dir <- paste0(output_dir, "/1.1_HierarchicalCategory_Top100DEGs")
 
 ## Install & Load Packages
-cran_packages <- c("annotate", "circlize", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
+cran_packages <- c("annotate", "circlize", "clipr", "devtools", "EnhancedVolcano", "ggpubr", "ggrepel", "matrixStats", "pheatmap", "RColorBrewer", "tidyverse", "viridis")
 bioc_packages <- c("apeglm", "clusterProfiler", "ComplexHeatmap", "DESeq2", "DOSE", "enrichplot", "genefilter", "GSVA", "org.Hs.eg.db", "pathview", "xCell")
 install_and_load_packages(cran_packages, bioc_packages)
 
@@ -131,7 +134,7 @@ head(fc2)
 ##### Make DDSObject (INPUT NEEDED- Define if Doing Subset Analysis) ----
 ### ############################### ###
 #subsetToAnalyze <- NULL #If not performing subset analysis
-subsetToAnalyze <- "358" # Define 318 or 358 cellLine Subset to analyze 
+subsetToAnalyze <- "318" # Define 318 or 358 cellLine Subset to analyze 
 ### ############################### ###
 perform_subset_analysis <- !is.null(subsetToAnalyze) && subsetToAnalyze != ""
 # Perform conditional branching
@@ -422,7 +425,7 @@ resdata <- resdata[!duplicated(resdata$Gene),] #Remove rows with same gene, keep
 resdata <- resdata[order(resdata$log2FoldChange),] #Now order per log2FoldChange :Ascending
 
 ####SKIP STARTS if !(Need only list of Top and Bottom as separate lists)----
-TopN <- 10
+TopN <- 500
 Criteria <- "Down" # "Up" or "Down"
 
 if (Criteria == "Up") {
