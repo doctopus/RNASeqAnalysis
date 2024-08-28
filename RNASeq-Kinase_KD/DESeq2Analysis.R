@@ -90,7 +90,7 @@ sentence_case <- function(name) {
 }
 ##### Setup Project ----
 ## Initiate project
-setupProject("RNASeq-Kinase") ; print(paste0("Working dir is: ", getwd()))
+setupProject("RNASeq-Kinase_KD") ; print(paste0("Working dir is: ", getwd()))
 # If any project specific override: output folder 1.1_HierarchicalCategory_Top100DEGs
 # output_dir <- paste0(output_dir, "/1.1_HierarchicalCategory_Top100DEGs")
 

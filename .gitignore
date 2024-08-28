@@ -1,4 +1,5 @@
 .DS_Store
+.idea
 .Rproj.user
 .Rhistory
 .RData
@@ -8,12 +9,11 @@
 # Figures 
 *.png
 # Ignore all files in io directory
-input/*
-output/*
+**/input/*
+**/output/*
+**/featureCounts_0
 # Except these files in those directory
-!input/GSEA/
-!input/GSEA/*.gmt
-!input/*.example
-!output/*.example
-!output/figures/
-!output/figures/example.jpg
+!**/input/GSEA/
+!**/input/GSEA/*.gmt
+!**/input/*.example
+!**/output/*.example
