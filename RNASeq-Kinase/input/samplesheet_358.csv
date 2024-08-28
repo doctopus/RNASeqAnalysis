@@ -1,0 +1,13 @@
+sample,fastq_1,fastq_2,strandedness,replicate,group,cellLine,drug
+358-Control_E1,input/data/E1/E1_1.fq.gz,input/data/E1/E1_2.fq.gz,auto,E1,358-Control,358,Control
+358-Control_E2,input/data/E2/E2_1.fq.gz,input/data/E2/E2_2.fq.gz,auto,E2,358-Control,358,Control
+358-Control_E3,input/data/E3/E3_1.fq.gz,input/data/E3/E3_2.fq.gz,auto,E3,358-Control,358,Control
+358-128-10_F1,input/data/F1/F1_1.fq.gz,input/data/F1/F1_2.fq.gz,auto,F1,358-128-10,358,128-10
+358-128-10_F2,input/data/F2/F2_1.fq.gz,input/data/F2/F2_2.fq.gz,auto,F2,358-128-10,358,128-10
+358-128-10_F3,input/data/F3/F3_1.fq.gz,input/data/F3/F3_2.fq.gz,auto,F3,358-128-10,358,128-10
+358-130_G1,input/data/G1/G1_1.fq.gz,input/data/G1/G1_2.fq.gz,auto,G1,358-130,358,130
+358-130_G2,input/data/G2/G2_1.fq.gz,input/data/G2/G2_2.fq.gz,auto,G2,358-130,358,130
+358-130_G3,input/data/G3/G3_1.fq.gz,input/data/G3/G3_2.fq.gz,auto,G3,358-130,358,130
+358-128-13_H1,input/data/H1/H1_1.fq.gz,input/data/H1/H1_2.fq.gz,auto,H1,358-128-13,358,128-13
+358-128-13_H2,input/data/H2/H2_1.fq.gz,input/data/H2/H2_2.fq.gz,auto,H2,358-128-13,358,128-13
+358-128-13_H3,input/data/H3/H3_1.fq.gz,input/data/H3/H3_2.fq.gz,auto,H3,358-128-13,358,128-13

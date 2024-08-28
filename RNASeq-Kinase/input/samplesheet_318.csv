@@ -1,0 +1,13 @@
+﻿sample,fastq_1,fastq_2,strandedness,replicate,group,cellLine,drug
+318-Control_A1,input/data/A1/A1_1.fq.gz,input/data/A1/A1_2.fq.gz,auto,A1,318-Control,318,Control
+318-Control_A2,input/data/A2/A2_1.fq.gz,input/data/A2/A2_2.fq.gz,auto,A2,318-Control,318,Control
+318-Control_A3,input/data/A3/A3_1.fq.gz,input/data/A3/A3_2.fq.gz,auto,A3,318-Control,318,Control
+318-128-10_B1,input/data/B1/B1_1.fq.gz,input/data/B1/B1_2.fq.gz,auto,B1,318-128-10,318,128-10
+318-128-10_B2,input/data/B2/B2_1.fq.gz,input/data/B2/B2_2.fq.gz,auto,B2,318-128-10,318,128-10
+318-128-10_B3,input/data/B3/B3_1.fq.gz,input/data/B3/B3_2.fq.gz,auto,B3,318-128-10,318,128-10
+318-130_C1,input/data/C1/C1_1.fq.gz,input/data/C1/C1_2.fq.gz,auto,C1,318-130,318,130
+318-130_C2,input/data/C2/C2_1.fq.gz,input/data/C2/C2_2.fq.gz,auto,C2,318-130,318,130
+318-130_C3,input/data/C3/C3_1.fq.gz,input/data/C3/C3_2.fq.gz,auto,C3,318-130,318,130
+318-128-13_D1,input/data/D1/D1_1.fq.gz,input/data/D1/D1_2.fq.gz,auto,D1,318-128-13,318,128-13
+318-128-13_D2,input/data/D2/D2_1.fq.gz,input/data/D2/D2_2.fq.gz,auto,D2,318-128-13,318,128-13
+318-128-13_D3,input/data/D3/D3_1.fq.gz,input/data/D3/D3_2.fq.gz,auto,D3,318-128-13,318,128-13
