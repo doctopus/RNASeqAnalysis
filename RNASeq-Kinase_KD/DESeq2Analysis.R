@@ -102,6 +102,7 @@ install_and_load_packages(cran_packages, bioc_packages)
 ##### Source & Process Input files ----
 file_samplesheet<-paste0(input_dir,"/samplesheet.csv")
 file_fc<-paste0(input_dir,"/featureCounts_0")
+#file_fc2 <- paste0(input_dir, "/HPCprocessed/featureCounts_0")
 ## Process input files
 sampleData<-read.csv(file = file_samplesheet, 
                   header=TRUE, 
@@ -113,9 +114,10 @@ sampleData <- sampleData %>% mutate(drug = gsub("-", ".", drug))
 sampleData[, c("cellLine", "drug")] <- lapply(sampleData[, c("cellLine", "drug")], factor)
 head(sampleData)
 
-fc <- read.delim(file_fc, row.names = NULL, check.names = FALSE)
+fc <- read.delim(file_fc, row.names = NULL, check.names = FALSE) #70711x36
+#fcHPCprocessed <- read.delim(file_fc2, row.names = NULL, check.names = FALSE)
 genes_to_keep <- rowSums(fc[, 8:ncol(fc)]) > 1        #Keep Genes which are expressed in >1 sample
-desired_order <- rownames(sampleData)                    #Order of columns per sampleData
+desired_order <- rownames(sampleData)                 #Order of columns per sampleData
 
 fc1 <- fc %>%
   filter(genes_to_keep) %>%                           # Keep genes with expression in >1 sample
@@ -128,13 +130,13 @@ fc1 <- fc %>%
   column_to_rownames("EnsembleID")                    # Set EnsembleID as row names
 
 # Order the columns according to desired_order
-fc2 <- fc1[, desired_order]
+fc2 <- fc1[, desired_order] #26818x29
 head(fc2)
 
 ##### Make DDSObject (INPUT NEEDED- Define if Doing Subset Analysis) ----
 ### ############################### ###
-#subsetToAnalyze <- NULL #If not performing subset analysis
-subsetToAnalyze <- "318" # Define 318 or 358 cellLine Subset to analyze 
+subsetToAnalyze <- NULL #If not performing subset analysis
+#subsetToAnalyze <- "318" # Define 318 or 358 cellLine Subset to analyze 
 ### ############################### ###
 perform_subset_analysis <- !is.null(subsetToAnalyze) && subsetToAnalyze != ""
 # Perform conditional branching
@@ -164,7 +166,7 @@ ddsObject <- DESeqDataSetFromMatrix(countData = countData,
 if (perform_subset_analysis) {
   smallestGroupSize <- 3
 } else {
-  smallestGroupSize <- 12
+  smallestGroupSize <- 6
 }
 #counts(ddsObject)
 #keep <-  rowSums(counts(dds2))>= 10
@@ -177,7 +179,7 @@ ddsObject_filtered$drug
 #Since we are primarily comparing between different drugs, so our primary level
 #of comparison is drugs, and here reference level is Control 
 #(this only reorders, since the default comparison is with first in the list)
-ddsObject_filtered$drug <- relevel(ddsObject_filtered$drug, ref="Control")
+ddsObject_filtered$drug <- relevel(ddsObject_filtered$drug, ref="shNT")
 
 ddsObject_filtered$drug <- droplevels(ddsObject_filtered$drug) #remove the levels (of drug) 
 # ...which do not have samples in the current data set. Here nothing removed
