@@ -109,9 +109,9 @@ sampleData<-read.csv(file = file_samplesheet,
                   stringsAsFactors = FALSE, 
                   check.names = FALSE,
                   row.names = "sample")
-sampleData <- sampleData[,c("cellLine", "drug")]
+sampleData <- sampleData[,c("cellLine", "drug", "comparison")]
 sampleData <- sampleData %>% mutate(drug = gsub("-", ".", drug))
-sampleData[, c("cellLine", "drug")] <- lapply(sampleData[, c("cellLine", "drug")], factor)
+sampleData[, c("cellLine", "drug", "comparison")] <- lapply(sampleData[, c("cellLine", "drug", "comparison")], factor)
 head(sampleData)
 
 fc <- read.delim(file_fc, row.names = NULL, check.names = FALSE) #70711x36
@@ -143,11 +143,11 @@ perform_subset_analysis <- !is.null(subsetToAnalyze) && subsetToAnalyze != ""
 if (perform_subset_analysis) {
   countData <- fc2 %>% dplyr::select(contains(subsetToAnalyze))
   colData <- sampleData %>% filter(cellLine == subsetToAnalyze)
-  design_formula <- ~ drug
+  design_formula <- ~ comparison #drug, or comparison
 } else {
   countData <- fc2
   colData <- sampleData
-  design_formula <- ~ cellLine + drug
+  design_formula <- ~ cellLine + comparison #drug, or comparison
 }
 # Check validity of data format
 if (all(colnames(countData) == rownames(colData))) {
@@ -179,9 +179,12 @@ ddsObject_filtered$drug
 #Since we are primarily comparing between different drugs, so our primary level
 #of comparison is drugs, and here reference level is Control 
 #(this only reorders, since the default comparison is with first in the list)
-ddsObject_filtered$drug <- relevel(ddsObject_filtered$drug, ref="shNT")
 
-ddsObject_filtered$drug <- droplevels(ddsObject_filtered$drug) #remove the levels (of drug) 
+#ddsObject_filtered$drug <- relevel(ddsObject_filtered$drug, ref="shNT")
+ddsObject_filtered$comparison <- relevel(ddsObject_filtered$comparison, ref="shNT")
+
+#ddsObject_filtered$drug <- droplevels(ddsObject_filtered$drug) #remove the levels (of drug)
+ddsObject_filtered$comparison <- droplevels(ddsObject_filtered$comparison) #remove the levels (of comparison) 
 # ...which do not have samples in the current data set. Here nothing removed
 
 ##### Run DESeq2 Analysis ----
@@ -365,7 +368,7 @@ plotPcaRLD500Data <- plotPCA(rld, intgroup="drug", returnData=TRUE)
 pcaRLD500 <- plotPcaRLD500 + geom_label_repel(data=plotPcaRLD500Data, 
                                     aes(label=name),
                                     min.segment.length = 0.5,
-                                    max.overlaps = 1)+
+                                    max.overlaps = 15)+
   ggtitle(label="PCA Plot of Top 500 Variable Genes")+
   labs(caption = "Regularized Log Transformed (RLT) Count Data") +
   theme_minimal()+
@@ -385,8 +388,8 @@ print(pcaRLD500)
 
 ### DEG Prepare Data for Plot (INPUT NEEDED- Define Comparison Groups)----
 ComparisonColumn <- "drug"
-factor1 <- "130" #Choose from 128.10, 128.13 & 130
-factor2 <- "Control"
+factor1 <- "shPIP4K2C_1" #Choose from 128.10, 128.13 & 130
+factor2 <- "shNT"
 title <- paste(factor1, "vs", factor2)  
 # resultsNames(dds)
 e <- as.character(c(ComparisonColumn, factor1, factor2))
