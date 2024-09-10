@@ -387,8 +387,8 @@ print(pcaRLD500)
 
 
 ### DEG Prepare Data for Plot (INPUT NEEDED- Define Comparison Groups)----
-ComparisonColumn <- "drug"
-factor1 <- "shPIP4K2C_1" #Choose from 128.10, 128.13 & 130
+ComparisonColumn <- "comparison" #drug or comparison
+factor1 <- "shPIKFYVE" #Choose from shPIKFYVE, shPIP4K2C
 factor2 <- "shNT"
 title <- paste(factor1, "vs", factor2)  
 # resultsNames(dds)
@@ -397,12 +397,12 @@ e <- as.character(c(ComparisonColumn, factor1, factor2))
 res <- lfcShrink(dds, contrast = e, type = "normal") #Shrinked Result (L2FC, padj etc); "normal" algorithm
 
 annotation_colors <- list(
-  drug = c("128.10"="#9FD900", 
-           "128.13"="#FAA800", 
-           "130"="#ff5d8f", 
-           "Control"="#6c757d"),
+  comparison = c("shPIKFYVE"="#9FD900", 
+           # "xxx"="#FAA800", 
+           "shPIP4K2C"="#ff5d8f", 
+           "shNT"="#6c757d"),
   
-  cellLine =c("358"="#006E18", 
+  cellLine =c("315"="#006E18", 
               "318"="#832161")
 )
 icolors <- colorRampPalette(c("blue",
@@ -484,14 +484,23 @@ Top100_f1vsf2 <- Top100[, columns_to_keep]
 # Filter the colData to keep only those rows
 colData100_f1vsf2 <- colData[columns_to_keep, ]
 
-# Order the columns by 'drug'
-ordered_indices <- order(colData100_f1vsf2$drug, decreasing = TRUE)
-Top100_f1vsf2_ordered <- Top100_f1vsf2[, ordered_indices]
-colData100_f1vsf2_ordered <- colData100_f1vsf2[ordered_indices, ]
+
+# Sort colData100_f1vsf2 by the comparison column
+colData100_f1vsf2_ordered <- colData100_f1vsf2[order(colData100_f1vsf2$comparison, decreasing = TRUE), ]
+# Get the sorted row names
+ordered_names <- rownames(colData100_f1vsf2_ordered)
+# Reorder the columns of Top100_f1vsf2 using the sorted names
+Top100_f1vsf2_ordered <- Top100_f1vsf2[, ordered_names]
+
+
+# Order the columns by 'drug' #drug or comparison
+# ordered_indices <- order(colData100_f1vsf2$comparison, decreasing = TRUE)
+# Top100_f1vsf2_ordered <- Top100_f1vsf2[, ordered_indices]
+# colData100_f1vsf2_ordered <- colData100_f1vsf2[ordered_indices, ]
 
 # Filter annotation colors to include only relevant levels
 annotation_colors_filtered <- list(
-  drug = annotation_colors$drug[names(annotation_colors$drug) %in% unique(colData100_f1vsf2_ordered$drug)],
+  comparison = annotation_colors$comparison[names(annotation_colors$comparison) %in% unique(colData100_f1vsf2_ordered$comparison)],
   cellLine = annotation_colors$cellLine[names(annotation_colors$cellLine) %in% unique(colData100_f1vsf2_ordered$cellLine)]
 )
 
@@ -503,6 +512,7 @@ gene_names <- mapIds(org.Hs.eg.db,
                      keytype = "SYMBOL",
                      multiVals = "first")
 #Copy the data frame
+old_df <- Top100_f1vsf2_ordered
 new_df <- Top100_f1vsf2_ordered
 # Assign gene names to GeneName column
 new_df$GeneName <- gene_names[rownames(Top100_f1vsf2_ordered)]
@@ -510,34 +520,38 @@ new_df$GeneName <- gene_names[rownames(Top100_f1vsf2_ordered)]
 new_df <- new_df %>% mutate(GeneName = sapply(GeneName, sentence_case))
 # Append GeneName(Symbol) to The GeneName column
 new_df$GeneName <- paste(rownames(Top100_f1vsf2_ordered), new_df$GeneName, sep = ": ")
-##MANUALLY Save this data in spreadsheet
+
+##SKIP- MANUALLY Save this data in spreadsheet
 new_df_control_130 <- new_df %>% select("GeneName")
 # install.packages("clipr")
 library(clipr)
 # Export the data frame to clipboard
 write_clip(new_df_control_130)
-
+##SKIP-END MANUALLY Save this data in spreadsheet
 # Append GeneName to row names separated by ":"
-rownames(new_df) <- paste(rownames(Top100_f1vsf2_ordered), new_df$GeneName, sep = ": ")
+# rownames(new_df) <- paste(rownames(Top100_f1vsf2_ordered), new_df$GeneName, sep = ": ")
+rownames(new_df) <- new_df$GeneName
 
 ##Remove the GeneName column if no longer needed
 new_df$GeneName <- NULL
 # Assign it back as the Top100_f1vsf2_ordered
-Top100_f1vsf2_ordered <- new_df
+Top100_f1vsf2_ordered_withNames <- new_df
 
 
 #### Plot Top 100 DEG ----
-hmt100f1vsf2<-pheatmap::pheatmap(Top100_f1vsf2_ordered, scale="row", 
-              annotation_col=colData100_f1vsf2_ordered,
-              annotation=colData100_f1vsf2_ordered, 
-              cluster_cols = F,
-              cluster_rows = T,
-              cellwidth=10,
-              annotation_legend =TRUE, 
-              color= icolors,
-              annotation_colors = annotation_colors_filtered,
-              fontsize_row = 8,
-              main=paste0("Top 300 Fold Change: ", subsetToAnalyze, " cell Line \n", "[", title, "]"))
+hmt100f1vsf2 <- pheatmap::pheatmap(
+  Top100_f1vsf2_ordered_withNames, #Decide if want to use the _withNames df
+  scale = "row", 
+  annotation_col = colData100_f1vsf2_ordered,
+  cluster_cols = FALSE,
+  cluster_rows = TRUE,
+  cellwidth = 10,
+  annotation_legend = TRUE, 
+  color = icolors,
+  annotation_colors = annotation_colors_filtered,
+  fontsize_row = 8,
+  main = paste0("Top 100 DEG: ", subsetToAnalyze, " Combined Cell Lines \n", "[", title, "]")
+)
 # saveFigure(figure=hmt50,fileName="Top50FoldChange_heatmap_Control_128.13",h=12,w=12)
 
 #######Save Gene Data for Venn Diagram Analysis----
@@ -760,13 +774,14 @@ hmVariable<-pheatmap::pheatmap(mat,
                       show_rownames=T, 
                       cluster_rows = T,
                       cluster_cols = F,
-                      main="Top 100 Variable Genes - 358 Cell Line")
+                      main="Top 100 Variable Genes - All Cell Lines")
 # saveFigure(figure=hmVariable,fileName="Top100VariableGenes All Cell Lines",h=12,w=12)
 
 ##### Volcano Plot ----
 volcanoPlot<-EnhancedVolcano(resdata,
               lab = resdata$Gene,
-              title = paste(subsetToAnalyze, "cell Line \n", "[", title, "]"),
+              # title = paste(subsetToAnalyze, "cell Line \n", "[", title, "]"),
+              title = paste(" All cell lines \n", "[", title, "]"),
               x = 'log2FoldChange',
               y = 'pvalue',
               pCutoff = 10e-4, #Default P value cutoff is 10e-6
@@ -814,7 +829,8 @@ dotplot(gsea_hallmark,
         orderBy = "NES",
         #color = "p.adjust", # Map 'p.adjust' to color
         font.size = 10) +
-  ggtitle(paste("Differential Hallmark Pathways:", subsetToAnalyze, "cell Line \n", "[", title, "]")) +
+  ggtitle(paste("Differential Hallmark Pathways:", subsetToAnalyze, "All Cell Lines \n", "[", title, "]")) +
+  # ggtitle(paste("Differential Hallmark Pathways:", subsetToAnalyze, "cell Line \n", "[", title, "]")) +
   theme(plot.title = element_text(hjust = 0.5))
 #NES is Normalized Enrichment Score
 
@@ -882,7 +898,7 @@ head(gene_list)
 #CC: Cellular Component,
 #ALL: All Components
 
-onto = "MF"
+onto = "CC" #[INPUT_NEEDED]
 dictionary <- c(ALL = "ALL", CC="Cellular Component", BP="Biological Process", MF="Molecular Function")
 
 # dictionary[[onto]]
@@ -904,8 +920,8 @@ gse <- gseGO(geneList = gene_list,
 dotplot(gse, 
         font.size = 15,
         label_format = 35,# Width of the labels
-        title=paste0("GO Gene Set Enrichment Analysis \n", subsetToAnalyze, " Cell Line - ",
-                    dictionary[[onto]], " - ", "[", title, "]"),
+        title=paste0("GO Gene Set Enrichment Analysis \n", "All Cell Lines - ", dictionary[[onto]], "\n", "[", title, "]"),
+        # title=paste0("GO Gene Set Enrichment Analysis \n", subsetToAnalyze, " Cell Line - ", dictionary[[onto]], " - ", "[", title, "]"),
         showCategory=5, 
         split=".sign") +
   facet_grid(.~.sign)+
@@ -922,8 +938,8 @@ emapplot(x2,
          shadowtext= TRUE, 
          font.size = 15,
          showCategory = 20) +
-  ggtitle(paste0("GO Enrichment Map of GSE Analysis \n", subsetToAnalyze, " Cell Line - ",
-                dictionary[[onto]], " - ", "[", title, "]"))+
+  ggtitle(paste0("GO Enrichment Map of GSE Analysis \n", "All Cell Lines - ", dictionary[[onto]], " - ", "[", title, "]"))+
+  # ggtitle(paste0(" GO Enrichment Map of GSE Analysis \n", subsetToAnalyze, " Cell Line - ", dictionary[[onto]], " - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold"))
 
 
@@ -933,8 +949,8 @@ cnetplot(gse,
          categorySize="pvalue", 
          foldChange=gene_list, 
          showCategory = 3)+
-  ggtitle(paste0("GO Enrichment Gene-Concept Network \n", subsetToAnalyze, " Cell Line - ",
-                dictionary[[onto]], " - ", "[", title, "]"))+
+  ggtitle(paste0("GO Enrichment Gene-Concept Network \n", "All Cell Lines - ", dictionary[[onto]], " - ", "[", title, "]"))+
+  # ggtitle(paste0("GO Enrichment Gene-Concept Network \n", subsetToAnalyze, " Cell Line - ", dictionary[[onto]], " - ", "[", title, "]"))+
   theme(plot.title = element_text(size=15, face = "bold")) +
   labs(subtitle = "",
        caption = "Plot linkages of genes and enriched concepts in GO categories")
